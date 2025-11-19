@@ -1,0 +1,3935 @@
+# -*- coding: UTF-8 -*-
+
+from header_common import *
+from header_scene_props import *
+from header_operations import *
+from header_triggers import *
+from header_items import *
+from header_skills import *
+from header_sounds import *
+from module_constants import *
+import string
+
+####################################################################################################################
+#  Each scene prop record contains the following fields:
+#  1) Scene prop id: used for referencing scene props in other files. The prefix spr_ is automatically added before each scene prop id.
+#  2) Scene prop flags. See header_scene_props.py for a list of available flags
+#  3) Mesh name: Name of the mesh.
+#  4) Physics object name:
+#  5) Triggers: Simple triggers that are associated with the scene prop
+####################################################################################################################
+
+check_item_use_trigger = (ti_on_scene_prop_use,
+    [
+      (store_trigger_param_1, ":agent_id"),
+      (store_trigger_param_2, ":instance_id"),
+      
+      #for only server itself-----------------------------------------------------------------------------------------------
+      (call_script, "script_use_item", ":instance_id", ":agent_id"),
+      #for only server itself-----------------------------------------------------------------------------------------------
+      (get_max_players, ":num_players"),                               
+      (try_for_range, ":player_no", 1, ":num_players"), #0 is server so starting from 1
+        (player_is_active, ":player_no"),
+        (multiplayer_send_2_int_to_player, ":player_no", multiplayer_event_use_item, ":instance_id", ":agent_id"),
+      (try_end),
+    ])
+
+check_sally_door_use_trigger_double = (ti_on_scene_prop_use,
+    [
+      (store_trigger_param_1, ":agent_id"),
+      (store_trigger_param_2, ":instance_id"),
+
+      (agent_get_position, pos1, ":agent_id"),
+      (prop_instance_get_starting_position, pos2, ":instance_id"),
+      
+      (scene_prop_get_slot, ":opened_or_closed", ":instance_id", scene_prop_open_or_close_slot),
+
+      (try_begin),
+        #out doors like castle sally door can be opened only from inside, if door coordinate is behind your coordinate. Also it can be closed from both sides.
+        
+        (prop_instance_get_scene_prop_kind, ":scene_prop_id", ":instance_id"),
+        
+        (assign, ":can_open_door", 0),
+        (try_begin),
+          (neg|eq, ":scene_prop_id", "spr_viking_keep_destroy_sally_door_right"),
+          (neg|eq, ":scene_prop_id", "spr_viking_keep_destroy_sally_door_left"),
+          (neg|eq, ":scene_prop_id", "spr_earth_sally_gate_right"),
+          (neg|eq, ":scene_prop_id", "spr_earth_sally_gate_left"),
+          
+          (position_is_behind_position, pos1, pos2),
+          (assign, ":can_open_door", 1),
+        (else_try),  
+          (this_or_next|eq, ":scene_prop_id", "spr_viking_keep_destroy_sally_door_right"),
+          (this_or_next|eq, ":scene_prop_id", "spr_viking_keep_destroy_sally_door_left"),
+          (this_or_next|eq, ":scene_prop_id", "spr_earth_sally_gate_right"),
+          (eq, ":scene_prop_id", "spr_earth_sally_gate_left"),
+
+          (neg|position_is_behind_position, pos1, pos2),
+          (assign, ":can_open_door", 1),
+        (try_end),
+        
+        (this_or_next|eq, ":can_open_door", 1),
+        (eq, ":opened_or_closed", 1),
+      
+        (try_begin),
+          #for only server itself-----------------------------------------------------------------------------------------------
+          (call_script, "script_use_item", ":instance_id", ":agent_id"),
+          #for only server itself-----------------------------------------------------------------------------------------------
+          (get_max_players, ":num_players"),                               
+          (try_for_range, ":player_no", 1, ":num_players"), #0 is server so starting from 1
+            (player_is_active, ":player_no"),
+            (multiplayer_send_2_int_to_player, ":player_no", multiplayer_event_use_item, ":instance_id", ":agent_id"),
+          (try_end),
+        (try_end),
+      (try_end),
+    ])
+
+check_sally_door_use_trigger = (ti_on_scene_prop_use,
+    [
+      (store_trigger_param_1, ":agent_id"),
+      (store_trigger_param_2, ":instance_id"),
+
+      (agent_get_position, pos1, ":agent_id"),
+      (prop_instance_get_starting_position, pos2, ":instance_id"),
+      
+      (scene_prop_get_slot, ":opened_or_closed", ":instance_id", scene_prop_open_or_close_slot),
+
+      (try_begin),
+        #out doors like castle sally door can be opened only from inside, if door coordinate is behind your coordinate. Also it can be closed from both sides.
+        (this_or_next|position_is_behind_position, pos1, pos2),
+        (eq, ":opened_or_closed", 1),
+      
+        (try_begin),
+          #for only server itself-----------------------------------------------------------------------------------------------
+          (call_script, "script_use_item", ":instance_id", ":agent_id"),
+          #for only server itself-----------------------------------------------------------------------------------------------
+          (get_max_players, ":num_players"),                               
+          (try_for_range, ":player_no", 1, ":num_players"), #0 is server so starting from 1
+            (player_is_active, ":player_no"),
+            (multiplayer_send_2_int_to_player, ":player_no", multiplayer_event_use_item, ":instance_id", ":agent_id"),
+          (try_end),
+        (try_end),
+      (try_end),
+    ])
+
+check_castle_door_use_trigger = (ti_on_scene_prop_use,
+    [
+      (store_trigger_param_1, ":agent_id"),
+      (store_trigger_param_2, ":instance_id"),
+
+      (agent_get_position, pos1, ":agent_id"),
+      (prop_instance_get_starting_position, pos2, ":instance_id"),
+      
+      (scene_prop_get_slot, ":opened_or_closed", ":instance_id", scene_prop_open_or_close_slot),
+
+      (try_begin),
+        (ge, ":agent_id", 0),
+        (agent_get_team, ":agent_team", ":agent_id"),
+
+        #in doors like castle room doors can be opened from both sides, but only defenders can open these doors. Also it can be closed from both sides.
+        (this_or_next|eq, ":agent_team", 0),
+        (eq, ":opened_or_closed", 1),
+      
+        (try_begin),
+          #for only server itself-----------------------------------------------------------------------------------------------
+          (call_script, "script_use_item", ":instance_id", ":agent_id"),
+          #for only server itself-----------------------------------------------------------------------------------------------
+          (get_max_players, ":num_players"),                               
+          (try_for_range, ":player_no", 1, ":num_players"), #0 is server so starting from 1
+            (player_is_active, ":player_no"),
+            (multiplayer_send_2_int_to_player, ":player_no", multiplayer_event_use_item, ":instance_id", ":agent_id"),
+          (try_end),
+        (try_end),
+      (try_end),
+    ])
+
+check_ladder_animate_trigger = (ti_on_scene_prop_is_animating,
+    [      
+      (store_trigger_param_1, ":instance_id"),
+      (store_trigger_param_2, ":remaining_time"),
+
+      (call_script, "script_check_creating_ladder_dust_effect", ":instance_id", ":remaining_time"),
+      ])
+
+check_ladder_animation_finish_trigger = (ti_on_scene_prop_animation_finished,
+    [
+      (store_trigger_param_1, ":instance_id"),
+
+      (prop_instance_enable_physics, ":instance_id", 1),
+      ])
+
+scene_props = [
+  ("invalid_object",0,"question_mark","0", []),
+  ("inventory",sokf_type_container|sokf_place_at_origin,"package","bobaggage", []),
+  ("empty", 0, "0", "0", []),
+  ("chest_a",sokf_type_container,"chest_gothic","bochest_gothic", []),
+  ("container_small_chest",sokf_type_container,"package","bobaggage", []),
+  ("container_chest_b",sokf_type_container,"chest_b","bo_chest_b", []),
+  ("container_chest_c",sokf_type_container,"chest_c","bo_chest_c", []),
+  ("player_chest",sokf_type_container,"player_chest","bo_player_chest", []),
+  ("locked_player_chest",0,"player_chest","bo_player_chest", []),
+
+  ("light_sun",sokf_invisible,"light_sphere","0",  [
+     (ti_on_init_scene_prop,
+      [
+          (neg|is_currently_night),
+          (store_trigger_param_1, ":prop_instance_no"),
+          (set_fixed_point_multiplier, 100),
+          (prop_instance_get_scale, pos5, ":prop_instance_no"),
+          (position_get_scale_x, ":scale", pos5),
+          (store_time_of_day,reg(12)),
+          (try_begin),
+            (is_between,reg(12),5,20),
+            (store_mul, ":red", 5 * 200, ":scale"),
+            (store_mul, ":green", 5 * 193, ":scale"),
+            (store_mul, ":blue", 5 * 180, ":scale"),
+          (else_try),
+            (store_mul, ":red", 5 * 90, ":scale"),
+            (store_mul, ":green", 5 * 115, ":scale"),
+            (store_mul, ":blue", 5 * 150, ":scale"),
+          (try_end),
+          (val_div, ":red", 100),
+          (val_div, ":green", 100),
+          (val_div, ":blue", 100),
+          (set_current_color,":red", ":green", ":blue"),
+          (set_position_delta,0,0,0),
+          (add_point_light_to_entity, 0, 0),
+      ]),
+    ]),
+  ("light",sokf_invisible,"light_sphere","0",  [
+     (ti_on_init_scene_prop,
+      [
+          (store_trigger_param_1, ":prop_instance_no"),
+          (set_fixed_point_multiplier, 100),
+          (prop_instance_get_scale, pos5, ":prop_instance_no"),
+          (position_get_scale_x, ":scale", pos5),
+          (store_mul, ":red", 3 * 200, ":scale"),
+          (store_mul, ":green", 3 * 145, ":scale"),
+          (store_mul, ":blue", 3 * 45, ":scale"),
+          (val_div, ":red", 100),
+          (val_div, ":green", 100),
+          (val_div, ":blue", 100),
+          (set_current_color,":red", ":green", ":blue"),
+          (set_position_delta,0,0,0),
+          (add_point_light_to_entity, 10, 30),
+      ]),
+    ]),
+  ("light_red",sokf_invisible,"light_sphere","0",  [
+     (ti_on_init_scene_prop,
+      [
+          (store_trigger_param_1, ":prop_instance_no"),
+          (set_fixed_point_multiplier, 100),
+          (prop_instance_get_scale, pos5, ":prop_instance_no"),
+          (position_get_scale_x, ":scale", pos5),
+          (store_mul, ":red", 2 * 170, ":scale"),
+          (store_mul, ":green", 2 * 100, ":scale"),
+          (store_mul, ":blue", 2 * 30, ":scale"),
+          (val_div, ":red", 100),
+          (val_div, ":green", 100),
+          (val_div, ":blue", 100),
+          (set_current_color,":red", ":green", ":blue"),
+          (set_position_delta,0,0,0),
+          (add_point_light_to_entity, 20, 30),
+      ]),
+    ]),
+  ("light_night",sokf_invisible,"light_sphere","0",  [
+     (ti_on_init_scene_prop,
+      [
+#          (store_time_of_day,reg(12)),
+#          (neg|is_between,reg(12),5,20),
+          (is_currently_night, 0),
+          (store_trigger_param_1, ":prop_instance_no"),
+          (set_fixed_point_multiplier, 100),
+          (prop_instance_get_scale, pos5, ":prop_instance_no"),
+          (position_get_scale_x, ":scale", pos5),
+          (store_mul, ":red", 3 * 160, ":scale"),
+          (store_mul, ":green", 3 * 145, ":scale"),
+          (store_mul, ":blue", 3 * 100, ":scale"),
+          (val_div, ":red", 100),
+          (val_div, ":green", 100),
+          (val_div, ":blue", 100),
+          (set_current_color,":red", ":green", ":blue"),
+          (set_position_delta,0,0,0),
+          (add_point_light_to_entity, 10, 30),
+      ]),
+    ]),
+  ("torch",0,"torch_a","0",
+   [
+   (ti_on_init_scene_prop,
+    [
+        (set_position_delta,0,-35,48),
+        (particle_system_add_new, "psys_torch_fire"),
+        (particle_system_add_new, "psys_torch_smoke"),
+        (particle_system_add_new, "psys_torch_fire_sparks"),
+
+        (play_sound, "snd_torch_loop", 0),
+        
+        (set_position_delta,0,-35,56),
+        (particle_system_add_new, "psys_fire_glow_1"),
+#        (particle_system_emit, "psys_fire_glow_1",9000000),
+
+#second method        
+        (get_trigger_object_position, pos2),
+        (set_position_delta,0,0,0),
+        (position_move_y, pos2, -35),
+
+        (position_move_z, pos2, 55),
+        (particle_system_burst, "psys_fire_glow_fixed", pos2, 1),
+    ]),
+   ]),
+  ("torch_night",0,"torch_a","0",
+   [
+   (ti_on_init_scene_prop,
+    [
+#        (store_time_of_day,reg(12)),
+#        (neg|is_between,reg(12),5,20),
+        (is_currently_night, 0),
+        (set_position_delta,0,-35,48),
+        (particle_system_add_new, "psys_torch_fire"),
+        (particle_system_add_new, "psys_torch_smoke"),
+        (particle_system_add_new, "psys_torch_fire_sparks"),
+        (set_position_delta,0,-35,56),
+        (particle_system_add_new, "psys_fire_glow_1"),
+        (particle_system_emit, "psys_fire_glow_1",9000000),
+        (play_sound, "snd_torch_loop", 0),
+    ]),
+   ]),
+#  ("Baggage",sokf_place_at_origin|sokf_entity_body,"package","bobaggage"),
+  ("barrier_20m",sokf_invisible|sokf_type_barrier,"barrier_20m","bo_barrier_20m", []),
+  ("barrier_16m",sokf_invisible|sokf_type_barrier,"barrier_16m","bo_barrier_16m", []),
+  ("barrier_8m" ,sokf_invisible|sokf_type_barrier,"barrier_8m" ,"bo_barrier_8m" , []),
+  ("barrier_4m" ,sokf_invisible|sokf_type_barrier,"barrier_4m" ,"bo_barrier_4m" , []),
+  ("barrier_2m" ,sokf_invisible|sokf_type_barrier,"barrier_2m" ,"bo_barrier_2m" , []),
+  
+  ("exit_4m" ,sokf_invisible|sokf_type_barrier_leave,"barrier_4m" ,"bo_barrier_4m" , []),
+  ("exit_8m" ,sokf_invisible|sokf_type_barrier_leave,"barrier_8m" ,"bo_barrier_8m" , []),
+  ("exit_16m" ,sokf_invisible|sokf_type_barrier_leave,"barrier_16m" ,"bo_barrier_16m" , []),
+
+  ("ai_limiter_2m" ,sokf_invisible|sokf_type_ai_limiter,"barrier_2m" ,"bo_barrier_2m" , []),
+  ("ai_limiter_4m" ,sokf_invisible|sokf_type_ai_limiter,"barrier_4m" ,"bo_barrier_4m" , []),
+  ("ai_limiter_8m" ,sokf_invisible|sokf_type_ai_limiter,"barrier_8m" ,"bo_barrier_8m" , []),
+  ("ai_limiter_16m",sokf_invisible|sokf_type_ai_limiter,"barrier_16m","bo_barrier_16m", []),
+  ("Shield",sokf_dynamic,"0","boshield", []),
+  ("shelves",0,"shelves","boshelves", []),
+  ("table_tavern",0,"table_tavern","botable_tavern", []),
+  ("table_castle_a",0,"table_castle_a","bo_table_castle_a", []),
+  ("chair_castle_a",0,"chair_castle_a","bo_chair_castle_a", []),
+
+  ("pillow_a",0,"pillow_a","bo_pillow", []),
+  ("pillow_b",0,"pillow_b","bo_pillow", []),
+  ("pillow_c",0,"pillow_c","0", []),
+
+
+  ("interior_castle_g_square_keep_b",0,"interior_castle_g_square_keep_b","bo_interior_castle_g_square_keep_b", []),
+
+
+
+  ("carpet_with_pillows_a",0,"carpet_with_pillows_a","bo_carpet_with_pillows", []),
+  ("carpet_with_pillows_b",0,"carpet_with_pillows_b","bo_carpet_with_pillows", []),
+  ("table_round_a",0,"table_round_a","bo_table_round_a", []),
+  ("table_round_b",0,"table_round_b","bo_table_round_b", []),
+  ("fireplace_b",0,"fireplace_b","bo_fireplace_b", []),
+  ("fireplace_c",0,"fireplace_c","bo_fireplace_c", []),
+
+  ("sofa_a",0,"sofa_a","bo_sofa", []),
+  ("sofa_b",0,"sofa_b","bo_sofa", []),
+  ("ewer_a",0,"ewer_a","bo_ewer_a", []),
+  ("end_table_a",0,"end_table_a","bo_end_table_a", []),
+
+
+  ("fake_houses_steppe_a",0,"fake_houses_steppe_a","0", []),
+  ("fake_houses_steppe_b",0,"fake_houses_steppe_b","0", []),
+  ("fake_houses_steppe_c",0,"fake_houses_steppe_c","0", []),
+
+  ("boat_destroy",0,"boat_destroy","bo_boat_destroy", []),
+  ("destroy_house_a",0,"destroy_house_a","bo_destroy_house_a", []),
+  ("destroy_house_b",0,"destroy_house_b","bo_destroy_house_b", []),
+  ("destroy_house_c",0,"destroy_house_c","bo_destroy_house_c", []),
+  ("destroy_heap",0,"destroy_heap","bo_destroy_heap", []),
+  ("destroy_castle_a",0,"destroy_castle_a","bo_destroy_castle_a", []),
+  ("destroy_castle_b",0,"destroy_castle_b","bo_destroy_castle_b", []),
+  
+  ("destroy_castle_c",0,"destroy_castle_c","bo_destroy_castle_c", []),
+  
+  ("destroy_castle_d",0,"destroy_castle_d","bo_destroy_castle_d", []),
+  ("destroy_windmill",0,"destroy_windmill","bo_destroy_windmill", []),
+  ("destroy_tree_a",0,"destroy_tree_a","bo_destroy_tree_a", []),
+  ("destroy_tree_b",0,"destroy_tree_b","bo_destroy_tree_b", []),  
+  ("destroy_bridge_a",0,"destroy_bridge_a","bo_destroy_bridge_a", []),  
+  ("destroy_bridge_b",0,"destroy_bridge_b","bo_destroy_bridge_b", []),  
+
+
+  ("catapult",0,"Catapult","bo_Catapult", []),
+  
+  ("catapult_destructible",sokf_moveable|sokf_show_hit_point_bar|sokf_destructible,"Catapult","bo_Catapult", [
+   (ti_on_init_scene_prop,
+    [
+      (store_trigger_param_1, ":instance_no"),
+      (scene_prop_set_hit_points, ":instance_no", 1600),
+    ]),
+     
+   (ti_on_scene_prop_destroy,
+    [          
+      (play_sound, "snd_dummy_destroyed"),
+
+      (try_begin),
+        (this_or_next|multiplayer_is_server),
+		(neg|game_in_multiplayer_mode),
+
+
+        (store_trigger_param_1, ":instance_no"),      
+        (prop_instance_get_position, pos1, ":instance_no"),
+        (particle_system_burst, "psys_dummy_smoke_big", pos1, 100),
+        (particle_system_burst, "psys_dummy_straw_big", pos1, 100),      
+        (position_move_z, pos1, -500),
+        (position_rotate_x, pos1, 90),
+        (prop_instance_animate_to_position, ":instance_no", pos1, 300), #animate to 6 meters below in 6 second
+
+        (try_begin),
+          (eq, "$g_round_ended", 0),
+          (scene_prop_get_team, ":scene_prop_team_no", ":instance_no"),
+          (try_begin),
+            (eq, ":scene_prop_team_no", 0),
+            (assign, ":scene_prop_team_no_multiplier", -1), 
+          (else_try),
+            (assign, ":scene_prop_team_no_multiplier", 1), 
+          (try_end),
+
+          (try_begin),
+            (eq, "$g_number_of_targets_destroyed", 0),        
+            (store_mul, ":target_no_mul_scene_prop_team", ":scene_prop_team_no_multiplier", 1), #1 means destroyed object is a catapult
+            #for only server itself-----------------------------------------------------------------------------------------------                                                                                                      
+            (call_script, "script_show_multiplayer_message", multiplayer_message_type_target_destroyed, ":target_no_mul_scene_prop_team"), 
+            #for only server itself-----------------------------------------------------------------------------------------------     
+            (get_max_players, ":num_players"),                               
+            (try_for_range, ":player_no", 1, ":num_players"),
+              (player_is_active, ":player_no"),
+              (multiplayer_send_2_int_to_player, ":player_no", multiplayer_event_show_multiplayer_message, multiplayer_message_type_target_destroyed, ":target_no_mul_scene_prop_team"), 
+            (try_end),
+            (val_add, "$g_number_of_targets_destroyed", 1),
+          (else_try),
+            (store_mul, ":target_no_mul_scene_prop_team", ":scene_prop_team_no_multiplier", 9), #9 means attackers destroyed all targets
+            #for only server itself-----------------------------------------------------------------------------------------------      
+            (call_script, "script_show_multiplayer_message", multiplayer_message_type_target_destroyed, ":target_no_mul_scene_prop_team"), 
+            #for only server itself-----------------------------------------------------------------------------------------------     
+            (get_max_players, ":num_players"),                               
+            (try_for_range, ":player_no", 1, ":num_players"),
+              (player_is_active, ":player_no"),
+              (multiplayer_send_2_int_to_player, ":player_no", multiplayer_event_show_multiplayer_message, multiplayer_message_type_target_destroyed, ":target_no_mul_scene_prop_team"), 
+            (try_end),
+            (val_add, "$g_number_of_targets_destroyed", 1),
+          (try_end),
+        (try_end),
+
+        #giving gold for destroying target (for catapult)
+        #step-1 calculating total damage given to that scene prop
+        (assign, ":total_damage_given", 0),
+        (get_max_players, ":num_players"),                               
+        (try_for_range, ":player_no", 0, ":num_players"), 
+          (player_is_active, ":player_no"),
+          
+          (try_begin),
+            (eq, "spr_catapult_destructible", "$g_destructible_target_1"),
+            (player_get_slot, ":damage_given", ":player_no", slot_player_damage_given_to_target_1),
+          (else_try),
+            (player_get_slot, ":damage_given", ":player_no", slot_player_damage_given_to_target_2),
+          (try_end),
+
+          (val_add, ":total_damage_given", ":damage_given"),
+        (try_end),
+
+        #step-2 sharing 1000 gold (if num active players < 20 then 50 * num active players) to players which gave damage with the damage amounts.
+        (assign, ":destroy_money_addition", 0),
+        (get_max_players, ":num_players"),                               
+        (try_for_range, ":player_no", 0, ":num_players"), 
+          (player_is_active, ":player_no"),
+          (val_add, ":destroy_money_addition", 50),
+        (try_end),
+      
+        (try_begin),
+          (ge, ":destroy_money_addition", multi_destroy_target_money_add),
+          (assign, ":destroy_money_addition", multi_destroy_target_money_add),
+        (try_end),
+        (val_mul, ":destroy_money_addition", "$g_multiplayer_battle_earnings_multiplier"),
+        (val_div, ":destroy_money_addition", 100),
+      
+        (get_max_players, ":num_players"),                               
+        (try_for_range, ":player_no", 0, ":num_players"), 
+          (player_is_active, ":player_no"),
+          
+          (try_begin),
+            (eq, "spr_catapult_destructible", "$g_destructible_target_1"),
+            (player_get_slot, ":damage_given", ":player_no", slot_player_damage_given_to_target_1),
+          (else_try),
+            (player_get_slot, ":damage_given", ":player_no", slot_player_damage_given_to_target_2),
+          (try_end),
+
+          (player_get_gold, ":player_gold", ":player_no"), #give money to player which helped flag to be owned by new_flag_owner team
+
+          (val_mul, ":damage_given", ":destroy_money_addition"),
+
+          (try_begin),
+            (ge, ":total_damage_given", ":damage_given"),
+            (gt, ":damage_given", 0),
+            (store_div, ":gold_earned", ":damage_given", ":total_damage_given"),
+          (else_try),
+            (assign, ":gold_earned", 0),
+          (try_end),
+        
+          (val_add, ":player_gold", ":gold_earned"),
+          (player_set_gold, ":player_no", ":player_gold", multi_max_gold_that_can_be_stored),              
+        (try_end),
+      (try_end),
+    ]),     
+
+    (ti_on_scene_prop_hit,
+    [
+      (store_trigger_param_1, ":instance_no"),       
+      (store_trigger_param_2, ":damage"),
+      
+      (try_begin),
+        (scene_prop_get_hit_points, ":hit_points", ":instance_no"),
+        (val_sub, ":hit_points", ":damage"),
+        (gt, ":hit_points", 0),
+        (play_sound, "snd_dummy_hit"),
+      (else_try),
+        (neg|multiplayer_is_server),
+        (play_sound, "snd_dummy_destroyed"),
+      (try_end),
+
+      (try_begin),
+        (this_or_next|multiplayer_is_server),
+		(neg|game_in_multiplayer_mode),
+
+        (particle_system_burst, "psys_dummy_smoke", pos1, 3),
+        (particle_system_burst, "psys_dummy_straw", pos1, 10),
+        (set_fixed_point_multiplier, 1),
+        (position_get_x, ":attacker_agent_id", pos2),
+        (try_begin),
+          (ge, ":attacker_agent_id", 0),
+          (agent_is_alive, ":attacker_agent_id"),
+          (agent_is_human, ":attacker_agent_id"),
+          (neg|agent_is_non_player, ":attacker_agent_id"),
+          (agent_get_player_id, ":attacker_player_id", ":attacker_agent_id"),
+          (ge, ":attacker_player_id", 0),
+          (player_is_active, ":attacker_player_id"),        
+          (try_begin),
+            (eq, "spr_catapult_destructible", "$g_destructible_target_1"),
+            (player_get_slot, ":damage_given", ":attacker_player_id", slot_player_damage_given_to_target_1),
+            (val_add, ":damage_given", ":damage"),
+            (player_set_slot, ":attacker_player_id", slot_player_damage_given_to_target_1, ":damage_given"),
+          (else_try),
+            (player_get_slot, ":damage_given", ":attacker_player_id", slot_player_damage_given_to_target_2),
+            (val_add, ":damage_given", ":damage"),
+            (player_set_slot, ":attacker_player_id", slot_player_damage_given_to_target_2, ":damage_given"),
+          (try_end),
+        (try_end),
+      (try_end),
+    ]),
+  ]),
+  
+  ("broom",0,"broom","0", []),
+  ("garlic",0,"garlic","0", []),
+  ("garlic_b",0,"garlic_b","0", []),
+
+  ("destroy_a",0,"destroy_a","0", []),
+  ("destroy_b",0,"destroy_b","0", []),
+
+
+
+  ("bridge_wooden",0,"bridge_wooden","bo_bridge_wooden", []),
+  ("bridge_wooden_snowy",0,"bridge_wooden_snowy","bo_bridge_wooden", []),
+  
+  ("grave_a",0,"grave_a","bo_grave_a", []),
+
+  
+  ("village_house_e",0,"village_house_e","bo_village_house_e", []),
+  ("village_house_f",0,"village_house_f","bo_village_house_f", []),
+  ("village_house_g",0,"village_house_g","bo_village_house_g", []),
+  ("village_house_h",0,"village_house_h","bo_village_house_h", []),
+  ("village_house_i",0,"village_house_i","bo_village_house_i", []),
+  ("village_house_j",0,"village_house_j","bo_village_house_j", []),
+  ("village_wall_a",0,"village_wall_a","bo_village_wall_a", []),
+  ("village_wall_b",0,"village_wall_b","bo_village_wall_b", []),
+
+  ("village_snowy_house_a",0,"village_snowy_house_a","bo_village_snowy_house_a", []),  
+  ("village_snowy_house_b",0,"village_snowy_house_b","bo_village_snowy_house_b", []),
+  ("village_snowy_house_c",0,"village_snowy_house_c","bo_village_snowy_house_c", []),
+  ("village_snowy_house_d",0,"village_snowy_house_d","bo_village_snowy_house_d", []),
+  ("village_snowy_house_e",0,"village_snowy_house_e","bo_village_snowy_house_e", []),
+  ("village_snowy_house_f",0,"village_snowy_house_f","bo_village_snowy_house_f", []),
+
+
+
+  ("town_house_steppe_a",0,"town_house_steppe_a","bo_town_house_steppe_a", []),
+  ("town_house_steppe_b",0,"town_house_steppe_b","bo_town_house_steppe_b", []),
+  ("town_house_steppe_c",0,"town_house_steppe_c","bo_town_house_steppe_c", []),
+  ("town_house_steppe_d",0,"town_house_steppe_d","bo_town_house_steppe_d", []),
+  ("town_house_steppe_e",0,"town_house_steppe_e","bo_town_house_steppe_e", []),
+  ("town_house_steppe_f",0,"town_house_steppe_f","bo_town_house_steppe_f", []),
+  ("town_house_steppe_g",0,"town_house_steppe_g","bo_town_house_steppe_g", []),
+  ("town_house_steppe_h",0,"town_house_steppe_h","bo_town_house_steppe_h", []),
+  ("town_house_steppe_i",0,"town_house_steppe_i","bo_town_house_steppe_i", []),
+
+  ("carpet_a",0,"carpet_a","0", []),
+  ("carpet_b",0,"carpet_b","0", []),
+  ("carpet_c",0,"carpet_c","0", []),
+  ("carpet_d",0,"carpet_d","0", []),
+  ("carpet_e",0,"carpet_e","0", []),
+  ("carpet_f",0,"carpet_f","0", []),
+
+  ("awning_a",0,"awning_a","bo_awning", []),
+  ("awning_b",0,"awning_b","bo_awning", []),
+  ("awning_c",0,"awning_c","bo_awning", []),
+  ("awning_long",0,"awning_long","bo_awning_long", []),
+  ("awning_long_b",0,"awning_long_b","bo_awning_long", []),
+  ("awning_d",0,"awning_d","bo_awning_d", []),
+
+
+  ("ship",0,"ship","bo_ship", []),
+
+  ("ship_b",0,"ship_b","bo_ship_b", []),
+  ("ship_c",0,"ship_c","bo_ship_c", []),
+
+
+
+  ("ship_d",0,"ship_d","bo_ship_d", []),
+
+  ("snowy_barrel_a",0,"snowy_barrel_a","bo_snowy_barrel_a", []),
+  ("snowy_fence",0,"snowy_fence","bo_snowy_fence", []),
+  ("snowy_wood_heap",0,"snowy_wood_heap","bo_snowy_wood_heap", []),
+
+  ("village_snowy_stable_a",0,"village_snowy_stable_a","bo_village_snowy_stable_a", []),
+
+
+  ("village_straw_house_a",0,"village_straw_house_a","bo_village_straw_house_a", []),
+  ("village_stable_a",0,"village_stable_a","bo_village_stable_a", []),
+  ("village_shed_a",0,"village_shed_a","bo_village_shed_a", []),
+  ("village_shed_b",0,"village_shed_b","bo_village_shed_b", []),
+
+  ("dungeon_door_cell_a",0,"dungeon_door_cell_a","bo_dungeon_door_cell_a", []),
+  ("dungeon_door_cell_b",0,"dungeon_door_cell_b","bo_dungeon_door_cell_b", []),
+  ("dungeon_door_entry_a",0,"dungeon_door_entry_a","bo_dungeon_door_entry_a", []),
+  ("dungeon_door_entry_b",0,"dungeon_door_entry_b","bo_dungeon_door_entry_a", []),
+  ("dungeon_door_entry_c",0,"dungeon_door_entry_c","bo_dungeon_door_entry_a", []),
+  ("dungeon_door_direction_a",0,"dungeon_door_direction_a","bo_dungeon_door_direction_a", []),
+  ("dungeon_door_direction_b",0,"dungeon_door_direction_b","bo_dungeon_door_direction_a", []),
+  ("dungeon_door_stairs_a",0,"dungeon_door_stairs_a","bo_dungeon_door_stairs_a", []),
+  ("dungeon_door_stairs_b",0,"dungeon_door_stairs_b","bo_dungeon_door_stairs_a", []),
+  ("dungeon_bed_a",0,"dungeon_bed_a","0", []),
+  ("dungeon_bed_b",0,"dungeon_bed_b","bo_dungeon_bed_b", []),
+  ("torture_tool_a",0,"torture_tool_a","bo_torture_tool_a", []),
+  ("torture_tool_b",0,"torture_tool_b","0", []),
+  ("torture_tool_c",0,"torture_tool_c","bo_torture_tool_c", []),
+  ("skeleton_head",0,"skeleton_head","0", []),
+  ("skeleton_bone",0,"skeleton_bone","0", []),
+  ("skeleton_a",0,"skeleton_a","bo_skeleton_a", []),
+  ("dungeon_stairs_a",sokf_type_ladder,"dungeon_stairs_a","bo_dungeon_stairs_a", []),
+  ("dungeon_stairs_b",sokf_type_ladder,"dungeon_stairs_b","bo_dungeon_stairs_a", []),
+  ("dungeon_torture_room_a",0,"dungeon_torture_room_a","bo_dungeon_torture_room_a", []),
+  ("dungeon_entry_a",0,"dungeon_entry_a","bo_dungeon_entry_a", []),
+  ("dungeon_entry_b",0,"dungeon_entry_b","bo_dungeon_entry_b", []),
+  ("dungeon_entry_c",0,"dungeon_entry_c","bo_dungeon_entry_c", []),
+  ("dungeon_cell_a",0,"dungeon_cell_a","bo_dungeon_cell_a", []),
+  ("dungeon_cell_b",0,"dungeon_cell_b","bo_dungeon_cell_b", []),
+  ("dungeon_cell_c",0,"dungeon_cell_c","bo_dungeon_cell_c", []),
+  ("dungeon_corridor_a",0,"dungeon_corridor_a","bo_dungeon_corridor_a", []),
+  ("dungeon_corridor_b",0,"dungeon_corridor_b","bo_dungeon_corridor_b", []),
+  ("dungeon_corridor_c",0,"dungeon_corridor_c","bo_dungeon_corridor_b", []),
+  ("dungeon_corridor_d",0,"dungeon_corridor_d","bo_dungeon_corridor_b", []),
+  ("dungeon_direction_a",0,"dungeon_direction_a","bo_dungeon_direction_a", []),
+  ("dungeon_direction_b",0,"dungeon_direction_b","bo_dungeon_direction_a", []),
+  ("dungeon_room_a",0,"dungeon_room_a","bo_dungeon_room_a", []),
+  ("dungeon_tower_stairs_a",sokf_type_ladder,"dungeon_tower_stairs_a","bo_dungeon_tower_stairs_a", []),
+  ("dungeon_tower_cell_a",0,"dungeon_tower_cell_a","bo_dungeon_tower_cell_a", []),
+  ("tunnel_a",0,"tunnel_a","bo_tunnel_a", []),
+  ("tunnel_salt",0,"tunnel_salt","bo_tunnel_salt", []),
+  ("salt_a",0,"salt_a","bo_salt_a", []),
+
+  ("door_destructible",sokf_moveable|sokf_show_hit_point_bar|sokf_destructible|spr_use_time(2),"tutorial_door_a","bo_tutorial_door_a", [
+    check_item_use_trigger,
+
+   (ti_on_init_scene_prop,
+    [
+      (store_trigger_param_1, ":instance_no"),
+      (scene_prop_set_hit_points, ":instance_no", 2000),
+    ]),
+     
+   (ti_on_scene_prop_destroy,
+    [
+      (play_sound, "snd_dummy_destroyed"),
+      
+      (assign, ":rotate_side", 86),
+      
+      (try_begin),
+        (this_or_next|multiplayer_is_server),
+		(neg|game_in_multiplayer_mode),
+
+        (store_trigger_param_1, ":instance_no"),      
+        (store_trigger_param_2, ":attacker_agent_no"),
+
+        (set_fixed_point_multiplier, 100),
+        (prop_instance_get_position, pos1, ":instance_no"),
+
+        (try_begin),
+          (ge, ":attacker_agent_no", 0),
+          (agent_get_position, pos2, ":attacker_agent_no"),
+          (try_begin),
+            (position_is_behind_position, pos2, pos1),
+            (val_mul, ":rotate_side", -1),
+          (try_end),
+        (try_end),
+      
+        (init_position, pos3),
+
+        (try_begin),
+          (ge, ":rotate_side", 0),
+          (position_move_y, pos3, -100),
+        (else_try),
+          (position_move_y, pos3, 100),
+        (try_end),
+      
+        (position_move_x, pos3, -50),
+        (position_transform_position_to_parent, pos4, pos1, pos3),
+        (position_move_z, pos4, 100),
+        (position_get_distance_to_ground_level, ":height_to_terrain", pos4),
+        (val_sub, ":height_to_terrain", 100),
+        (assign, ":z_difference", ":height_to_terrain"),
+        (val_div, ":z_difference", 3),
+
+        (try_begin),
+          (ge, ":rotate_side", 0),
+          (val_add, ":rotate_side", ":z_difference"),
+        (else_try),
+          (val_sub, ":rotate_side", ":z_difference"),
+        (try_end),
+
+        (position_rotate_x, pos1, ":rotate_side"),
+        (prop_instance_animate_to_position, ":instance_no", pos1, 70), #animate to position 1 in 0.7 second
+      (try_end),
+    ]),       
+
+    (ti_on_scene_prop_hit,
+    [
+      (play_sound, "snd_dummy_hit"),
+      (particle_system_burst, "psys_dummy_smoke", pos1, 3),
+      (particle_system_burst, "psys_dummy_straw", pos1, 10),      
+    ]),
+  ]),
+
+  ("tutorial_door_a",sokf_moveable,"tutorial_door_a","bo_tutorial_door_a", []),
+
+  ("tutorial_door_b",sokf_moveable,"tutorial_door_b","bo_tutorial_door_b", []),
+
+  ("tutorial_flag_yellow",sokf_moveable|sokf_face_player,"tutorial_flag_yellow","0", []),
+  ("tutorial_flag_red",sokf_moveable|sokf_face_player,"tutorial_flag_red","0", []),
+  ("tutorial_flag_blue",sokf_moveable|sokf_face_player,"tutorial_flag_blue","0", []),
+
+  ("interior_prison_a",0,"interior_prison_a","bo_interior_prison_a", []),
+  ("interior_prison_b",0,"interior_prison_b","bo_interior_prison_b", []),
+  ("interior_prison_cell_a",0,"interior_prison_cell_a","bo_interior_prison_cell_a", []),
+  ("interior_prison_d",0,"interior_prison_d","bo_interior_prison_d", []),  
+
+  ("arena_archery_target_a",0,"arena_archery_target_a","bo_arena_archery_target_a", []),
+  ("archery_butt_a",0,"archery_butt","bo_archery_butt", [
+   (ti_on_scene_prop_hit,
+    [
+        (store_trigger_param_1, ":instance_no"),
+        (prop_instance_get_position, pos2, ":instance_no"),
+        (get_player_agent_no, ":player_agent"),
+        (agent_get_position, pos3, ":player_agent"),
+        (get_distance_between_positions, ":player_distance", pos3, pos2),
+        (position_transform_position_to_local, pos4, pos2, pos1),
+        (position_set_y, pos4, 0),
+        (position_set_x, pos2, 0),
+        (position_set_y, pos2, 0),
+        (position_set_z, pos2, 0),
+        (get_distance_between_positions, ":target_distance", pos4, pos2),
+        (assign, ":point_earned", 43), #Calculating a point between 0-12
+        (val_sub, ":point_earned", ":target_distance"),
+        (val_mul, ":point_earned", 1299),
+        (val_div, ":point_earned", 4300),
+        (try_begin),
+          (lt, ":point_earned", 0),
+          (assign, ":point_earned", 0),
+        (try_end),
+        (val_div, ":player_distance", 91), #Converting to yards
+        (assign, reg60, ":point_earned"),
+        (assign, reg61, ":player_distance"),
+        (display_message, "str_archery_target_hit"),
+    ]),
+  ]),
+  ("archery_target_with_hit_a",0,"arena_archery_target_a","bo_arena_archery_target_a", [
+   (ti_on_scene_prop_hit,
+    [
+        (set_fixed_point_multiplier, 100),
+        (store_trigger_param_1, ":instance_no"),
+        (position_get_x, ":attacker_agent_id", pos2),
+        (val_div, ":attacker_agent_id", 100),
+        (get_player_agent_no, ":player_agent"),
+        (try_begin),
+          (eq, ":player_agent", ":attacker_agent_id"),
+          (prop_instance_get_position, pos2, ":instance_no"),
+          (agent_get_position, pos3, ":player_agent"),
+          (get_distance_between_positions, ":player_distance", pos3, pos2),
+          (position_transform_position_to_local, pos4, pos2, pos1),
+          (position_set_y, pos4, 0),
+          (position_set_x, pos2, 0),
+          (position_set_y, pos2, 0),
+          (position_set_z, pos2, 0),
+          (get_distance_between_positions, ":target_distance", pos4, pos2),
+          (assign, ":point_earned", 43), #Calculating a point between 0-12
+          (val_sub, ":point_earned", ":target_distance"),
+          (val_mul, ":point_earned", 1299),
+          (val_div, ":point_earned", 4300),
+          (try_begin),
+            (lt, ":point_earned", 0),
+            (assign, ":point_earned", 0),
+          (try_end),
+          (assign, "$g_last_archery_point_earned", ":point_earned"),
+          (val_div, ":player_distance", 91), #Converting to yards
+          (assign, reg60, ":point_earned"),
+          (assign, reg61, ":player_distance"),
+          (display_message, "str_archery_target_hit"),
+          (eq, "$g_tutorial_training_ground_horseman_trainer_state", 6),
+          (eq, "$g_tutorial_training_ground_horseman_trainer_completed_chapters", 2),
+          (prop_instance_get_variation_id_2, ":var_id_2", ":instance_no"),
+          (val_sub, ":var_id_2", 1),
+          (eq, "$g_tutorial_training_ground_current_score", ":var_id_2"),
+          (val_add, "$g_tutorial_training_ground_current_score", 1),
+        (try_end),
+    ]),
+  ]),
+  ("dummy_a",sokf_destructible|sokf_moveable,"arena_archery_target_b","bo_arena_archery_target_b",   [
+   (ti_on_scene_prop_destroy,
+    [
+        (store_trigger_param_1, ":instance_no"),
+        (prop_instance_get_starting_position, pos1, ":instance_no"),
+        (get_player_agent_no, ":player_agent"),
+        (agent_get_position, 2, ":player_agent"),
+        (assign, ":rotate_side", 80),
+        (try_begin),
+          (position_is_behind_position, 2, 1),
+          (val_mul, ":rotate_side", -1),
+        (try_end),
+        (position_rotate_x, 1, ":rotate_side"),
+        (prop_instance_animate_to_position, ":instance_no", 1, 70), #animate to position 1 in 0.7 second
+        (val_add, "$tutorial_num_total_dummies_destroyed", 1),
+        (play_sound, "snd_dummy_destroyed"),
+    ]),
+   (ti_on_scene_prop_hit,
+    [
+        (store_trigger_param_1, ":instance_no"),
+        (store_trigger_param_2, ":damage"),
+        (assign, reg60, ":damage"),
+        (val_div, ":damage", 8),
+        (prop_instance_get_position, pos2, ":instance_no"),
+        (get_player_agent_no, ":player_agent"),
+        (agent_get_position, pos3, ":player_agent"),
+        (try_begin),
+          (position_is_behind_position, pos3, pos2),
+          (val_mul, ":damage", -1),
+        (try_end),
+        (position_rotate_x, 2, ":damage"),
+        (display_message, "str_delivered_damage"),
+        (prop_instance_animate_to_position, ":instance_no", 2, 30), #animate to position 1 in 0.3 second
+        (play_sound, "snd_dummy_hit"),
+        (particle_system_burst, "psys_dummy_smoke", pos1, 3),
+        (particle_system_burst, "psys_dummy_straw", pos1, 10),
+    ]),
+  ]),
+
+  ("band_a",0,"band_a","0", []),
+  ("arena_sign",0,"arena_arms","0", []),
+
+  ("castle_h_battlement_a",0,"castle_h_battlement_a","bo_castle_h_battlement_a", []),
+  ("castle_h_battlement_b",0,"castle_h_battlement_b","bo_castle_h_battlement_b", []),
+  ("castle_h_battlement_c",0,"castle_h_battlement_c","bo_castle_h_battlement_c", []),
+  ("castle_h_battlement_a2",0,"castle_h_battlement_a2","bo_castle_h_battlement_a2", []),
+  ("castle_h_battlement_b2",0,"castle_h_battlement_b2","bo_castle_h_battlement_b2", []),
+  ("castle_h_corner_a",0,"castle_h_corner_a","bo_castle_h_corner_a", []),
+  ("castle_h_corner_c",0,"castle_h_corner_c","bo_castle_h_corner_c", []),
+  ("castle_h_stairs_a",sokf_type_ladder,"castle_h_stairs_a","bo_castle_h_stairs_a", []),
+  ("castle_h_stairs_b",0,"castle_h_stairs_b","bo_castle_h_stairs_b", []),
+  ("castle_h_gatehouse_a",0,"castle_h_gatehouse_a","bo_castle_h_gatehouse_a", []),
+  ("castle_h_keep_a",0,"castle_h_keep_a","bo_castle_h_keep_a", []),
+  ("castle_h_keep_b",0,"castle_h_keep_b","bo_castle_h_keep_b", []),
+  ("castle_h_house_a",0,"castle_h_house_a","bo_castle_h_house_a", []),
+  ("castle_h_house_b",0,"castle_h_house_b","bo_castle_h_house_b", []),
+  ("castle_h_house_c",0,"castle_h_house_c","bo_castle_h_house_b", []),
+  ("castle_h_battlement_barrier",0,"castle_h_battlement_barrier","bo_castle_h_battlement_barrier", []),
+
+
+
+
+  ("full_keep_b",sokf_type_ladder,"full_keep_b","bo_full_keep_b", []),
+
+  ("castle_f_keep_a",0,"castle_f_keep_a","bo_castle_f_keep_a", []),
+  ("castle_f_battlement_a",0,"castle_f_battlement_a","bo_castle_f_battlement_a", []),
+  ("castle_f_battlement_a_destroyed",0,"castle_f_battlement_a_destroyed","bo_castle_f_battlement_a_destroyed", []),
+  ("castle_f_battlement_b",0,"castle_f_battlement_b","bo_castle_f_battlement_b", []),
+  ("castle_f_battlement_c",0,"castle_f_battlement_c","bo_castle_f_battlement_c", []),
+  ("castle_f_battlement_d",0,"castle_f_battlement_d","bo_castle_f_battlement_d", []),
+  ("castle_f_battlement_e",0,"castle_f_battlement_e","bo_castle_f_battlement_e", []),
+  ("castle_f_sally_port_elevation",0,"castle_f_sally_port_elevation","bo_castle_f_sally_port_elevation", []),
+  ("castle_f_battlement_corner_a",0,"castle_f_battlement_corner_a","bo_castle_f_battlement_corner_a", []),
+  ("castle_f_battlement_corner_b",0,"castle_f_battlement_corner_b","bo_castle_f_battlement_corner_b", []),
+  ("castle_f_battlement_corner_c",0,"castle_f_battlement_corner_c","bo_castle_f_battlement_corner_c", []),
+  
+  ("castle_f_door_a",sokf_moveable|sokf_show_hit_point_bar|sokf_destructible|spr_use_time(0),"castle_f_door_a","bo_castle_f_door_a", [
+    check_castle_door_use_trigger,
+
+   (ti_on_init_scene_prop,
+    [
+      (store_trigger_param_1, ":instance_no"),
+      (scene_prop_set_hit_points, ":instance_no", 1000),
+    ]),
+     
+   (ti_on_scene_prop_destroy,
+    [
+      (play_sound, "snd_dummy_destroyed"),
+      
+      (assign, ":rotate_side", 86),
+      
+      (try_begin),
+        (this_or_next|multiplayer_is_server),
+		(neg|game_in_multiplayer_mode),
+
+        (store_trigger_param_1, ":instance_no"),      
+        (store_trigger_param_2, ":attacker_agent_no"),
+
+        (set_fixed_point_multiplier, 100),
+        (prop_instance_get_position, pos1, ":instance_no"),
+
+        (try_begin),
+          (ge, ":attacker_agent_no", 0),
+          (agent_get_position, pos2, ":attacker_agent_no"),
+          (try_begin),
+            (position_is_behind_position, pos2, pos1),
+            (val_mul, ":rotate_side", -1),
+          (try_end),
+        (try_end),
+      
+        (init_position, pos3),
+
+        (try_begin),
+          (ge, ":rotate_side", 0),
+          (position_move_y, pos3, -100),
+        (else_try),
+          (position_move_y, pos3, 100),
+        (try_end),
+      
+        (position_move_x, pos3, -50),
+        (position_transform_position_to_parent, pos4, pos1, pos3),
+        (position_move_z, pos4, 100),
+        (position_get_distance_to_ground_level, ":height_to_terrain", pos4),
+        (val_sub, ":height_to_terrain", 100),
+        (assign, ":z_difference", ":height_to_terrain"),
+        #(assign, reg0, ":z_difference"),
+        #(display_message, "@{!}z dif : {reg0}"),
+        (val_div, ":z_difference", 3),
+
+        (try_begin),
+          (ge, ":rotate_side", 0),
+          (val_add, ":rotate_side", ":z_difference"),
+        (else_try),
+          (val_sub, ":rotate_side", ":z_difference"),
+        (try_end),
+
+        (position_rotate_x, pos1, ":rotate_side"),
+        (prop_instance_animate_to_position, ":instance_no", pos1, 70), #animate to position 1 in 0.7 second
+      (try_end),
+    ]),       
+  
+    (ti_on_scene_prop_hit,
+    [
+      (store_trigger_param_1, ":instance_no"),       
+      (store_trigger_param_2, ":damage"),
+      
+      (try_begin),
+        (scene_prop_get_hit_points, ":hit_points", ":instance_no"),
+        (val_sub, ":hit_points", ":damage"),
+        (gt, ":hit_points", 0),
+        (play_sound, "snd_dummy_hit"),
+      (else_try),
+        (neg|multiplayer_is_server),
+        (play_sound, "snd_dummy_destroyed"),
+      (try_end),
+
+      (try_begin),
+        (this_or_next|multiplayer_is_server),
+		(neg|game_in_multiplayer_mode),
+
+        (particle_system_burst, "psys_dummy_smoke", pos1, 3),
+        (particle_system_burst, "psys_dummy_straw", pos1, 10),
+      (try_end),      
+    ]),
+  ]),
+
+  ("castle_f_doors_top_a",0,"castle_f_doors_top_a","bo_castle_f_doors_top_a", []),
+    
+  ("castle_f_sally_door_a",sokf_moveable|sokf_show_hit_point_bar|sokf_destructible|spr_use_time(0),"castle_f_sally_door_a","bo_castle_f_sally_door_a", [
+    check_sally_door_use_trigger,
+
+   (ti_on_init_scene_prop,
+    [
+      (store_trigger_param_1, ":instance_no"),
+      (scene_prop_set_hit_points, ":instance_no", 1000),
+    ]),
+     
+   (ti_on_scene_prop_destroy,
+    [
+      (play_sound, "snd_dummy_destroyed"),
+      
+      (assign, ":rotate_side", 86),
+      
+      (try_begin),
+        (this_or_next|multiplayer_is_server),
+		(neg|game_in_multiplayer_mode),
+
+        (store_trigger_param_1, ":instance_no"),      
+        (store_trigger_param_2, ":attacker_agent_no"),
+
+        (set_fixed_point_multiplier, 100),
+        (prop_instance_get_position, pos1, ":instance_no"),
+
+        (try_begin),
+          (ge, ":attacker_agent_no", 0),
+          (agent_get_position, pos2, ":attacker_agent_no"),
+          (try_begin),
+            (position_is_behind_position, pos2, pos1),
+            (val_mul, ":rotate_side", -1),
+          (try_end),
+        (try_end),
+      
+        (init_position, pos3),
+
+        (try_begin),
+          (ge, ":rotate_side", 0),
+          (position_move_y, pos3, -100),
+        (else_try),
+          (position_move_y, pos3, 100),
+        (try_end),
+      
+        (position_move_x, pos3, -50),
+        (position_transform_position_to_parent, pos4, pos1, pos3),
+        (position_move_z, pos4, 100),
+        (position_get_distance_to_ground_level, ":height_to_terrain", pos4),
+        (val_sub, ":height_to_terrain", 100),
+        (assign, ":z_difference", ":height_to_terrain"),
+        (val_div, ":z_difference", 3),
+
+        (try_begin),
+          (ge, ":rotate_side", 0),
+          (val_add, ":rotate_side", ":z_difference"),
+        (else_try),
+          (val_sub, ":rotate_side", ":z_difference"),
+        (try_end),
+
+        (position_rotate_x, pos1, ":rotate_side"),
+        (prop_instance_animate_to_position, ":instance_no", pos1, 70), #animate to position 1 in 0.7 second
+      (try_end),
+    ]),       
+
+    (ti_on_scene_prop_hit,
+    [
+      (store_trigger_param_1, ":instance_no"),       
+      (store_trigger_param_2, ":damage"),
+      
+      (try_begin),
+        (scene_prop_get_hit_points, ":hit_points", ":instance_no"),
+        (val_sub, ":hit_points", ":damage"),
+        (gt, ":hit_points", 0),
+        (play_sound, "snd_dummy_hit"),
+      (else_try),
+        (neg|multiplayer_is_server),
+        (play_sound, "snd_dummy_destroyed"),
+      (try_end),
+
+      (try_begin),
+        (this_or_next|multiplayer_is_server),
+		(neg|game_in_multiplayer_mode),
+
+        (particle_system_burst, "psys_dummy_smoke", pos1, 3),
+        (particle_system_burst, "psys_dummy_straw", pos1, 10),
+      (try_end),      
+    ]),
+  ]),
+
+  ("castle_f_stairs_a",sokf_type_ladder,"castle_f_stairs_a","bo_castle_f_stairs_a", []),
+  ("castle_f_tower_a",sokf_type_ladder,"castle_f_tower_a","bo_castle_f_tower_a", []),
+  ("castle_f_wall_stairs_a",sokf_type_ladder,"castle_f_wall_stairs_a","bo_castle_f_wall_stairs_a", []),
+  ("castle_f_wall_stairs_b",sokf_type_ladder,"castle_f_wall_stairs_b","bo_castle_f_wall_stairs_b", []),
+  ("castle_f_wall_way_a",0,"castle_f_wall_way_a","bo_castle_f_wall_way_a", []),
+  ("castle_f_wall_way_b",0,"castle_f_wall_way_b","bo_castle_f_wall_way_b", []),
+  ("castle_f_gatehouse_a",0,"castle_f_gatehouse_a","bo_castle_f_gatehouse_a", []),
+
+  ("castle_g_battlement_a",0,"castle_g_battlement_a","bo_castle_g_battlement_a", []),
+  ("castle_g_battlement_a1",0,"castle_g_battlement_a1","bo_castle_g_battlement_a1", []),
+  ("castle_g_battlement_c",0,"castle_g_battlement_c","bo_castle_g_battlement_c", []),
+  ("castle_g_corner_a",0,"castle_g_corner_a","bo_castle_g_corner_a", []),
+  ("castle_g_corner_c",0,"castle_g_corner_c","bo_castle_g_corner_c", []),  
+  ("castle_g_tower_a",sokf_type_ladder,"castle_g_tower_a","bo_castle_g_tower_a", []),
+  ("castle_g_gate_house",0,"castle_g_gate_house","bo_castle_g_gate_house", []),
+  ("castle_g_gate_house_door_a",0,"castle_g_gate_house_door_a","bo_castle_g_gate_house_door_a", []),
+  ("castle_g_gate_house_door_b",0,"castle_g_gate_house_door_b","bo_castle_g_gate_house_door_b", []),
+  ("castle_g_square_keep_a",0,"castle_g_square_keep_a","bo_castle_g_square_keep_a", []),
+
+  ("castle_i_battlement_a",0,"castle_i_battlement_a","bo_castle_i_battlement_a", []),
+  ("castle_i_battlement_a1",0,"castle_i_battlement_a1","bo_castle_i_battlement_a1", []),
+  ("castle_i_battlement_c",0,"castle_i_battlement_c","bo_castle_i_battlement_c", []),
+  ("castle_i_corner_a",0,"castle_i_corner_a","bo_castle_i_corner_a", []),
+  ("castle_i_corner_c",0,"castle_i_corner_c","bo_castle_i_corner_c", []),  
+  ("castle_i_tower_a",sokf_type_ladder,"castle_i_tower_a","bo_castle_i_tower_a", []),
+  ("castle_i_gate_house",0,"castle_i_gate_house","bo_castle_i_gate_house", []),
+  ("castle_i_gate_house_door_a",0,"castle_i_gate_house_door_a","bo_castle_i_gate_house_door_a", []),
+  ("castle_i_gate_house_door_b",0,"castle_i_gate_house_door_b","bo_castle_i_gate_house_door_b", []),
+  ("castle_i_square_keep_a",0,"castle_i_square_keep_a","bo_castle_i_square_keep_a", []),
+
+
+
+
+
+  ("mosque_a",0,"mosque_a","bo_mosque_a", []),
+  ("stone_minaret_a",0,"stone_minaret_a","bo_stone_minaret_a", []),
+  ("stone_house_a",0,"stone_house_a","bo_stone_house_a", []),
+  ("stone_house_b",0,"stone_house_b","bo_stone_house_b", []),
+  ("stone_house_c",0,"stone_house_c","bo_stone_house_c", []),
+  ("stone_house_d",0,"stone_house_d","bo_stone_house_d", []),
+  ("stone_house_e",0,"stone_house_e","bo_stone_house_e", []),
+  ("stone_house_f",0,"stone_house_f","bo_stone_house_f", []),
+
+  ("banner_pole", sokf_moveable, "banner_pole", "bo_banner_pole", []),
+
+  ("custom_banner_01",0,"custom_banner_01","0",
+   [
+     (ti_on_init_scene_prop,
+      [
+        (party_get_slot, ":leader_troop", "$g_encountered_party", slot_town_lord),
+        (try_begin),
+          (ge, ":leader_troop", 0),
+          (cur_scene_prop_set_tableau_material, "tableau_custom_banner_default", ":leader_troop"),
+        (try_end),
+        ]),
+     ]),
+  ("custom_banner_02",0,"custom_banner_02","0",
+   [
+     (ti_on_init_scene_prop,
+      [
+        (party_get_slot, ":leader_troop", "$g_encountered_party", slot_town_lord),
+        (try_begin),
+          (ge, ":leader_troop", 0),
+          (cur_scene_prop_set_tableau_material, "tableau_custom_banner_default", ":leader_troop"),
+        (try_end),
+        ]),
+     ]),
+
+  ("banner_1_1",0,"banner_a01","0", []),
+  ("banner_1_2",0,"banner_a02","0", []),
+  ("banner_1_3",0,"banner_a03","0", []),
+  ("banner_1_4",0,"banner_a04","0", []),
+  ("banner_1_5",0,"banner_a05","0", []),
+  ("banner_1_6",0,"banner_a06","0", []),
+  ("banner_1_7",0,"banner_a07","0", []),
+  ("banner_1_8",0,"banner_a08","0", []),
+  ("banner_1_9",0,"banner_a09","0", []),
+  ("banner_1_10",0,"banner_a10","0", []),
+  ("banner_1_11",0,"banner_a11","0", []),
+  ("banner_1_12",0,"banner_a12","0", []),
+  ("banner_1_13",0,"banner_a13","0", []),
+  ("banner_1_14",0,"banner_a14","0", []),
+  ("banner_1_15",0,"banner_f21","0", []),
+  ("banner_1_16",0,"banner_a16","0", []),
+  ("banner_1_17",0,"banner_a17","0", []),
+  ("banner_1_18",0,"banner_a18","0", []),
+  ("banner_1_19",0,"banner_a19","0", []),
+  ("banner_1_20",0,"banner_a20","0", []),
+  ("banner_1_21",0,"banner_a21","0", []),
+  ("banner_1_22",0,"banner_b01","0", []),
+  ("banner_1_23",0,"banner_b02","0", []),
+  ("banner_1_24",0,"banner_b03","0", []),
+  ("banner_1_25",0,"banner_b04","0", []),
+  ("banner_1_26",0,"banner_b05","0", []),
+  ("banner_1_27",0,"banner_b06","0", []),
+  ("banner_1_18",0,"banner_b07","0", []),
+  ("banner_1_29",0,"banner_b08","0", []),
+  ("banner_1_30",0,"banner_b09","0", []),
+  ("banner_1_31",0,"banner_b10","0", []),
+  ("banner_1_32",0,"banner_b11","0", []),
+  ("banner_1_33",0,"banner_b12","0", []),
+  ("banner_1_34",0,"banner_b13","0", []),
+  ("banner_1_35",0,"banner_b14","0", []),
+  ("banner_1_36",0,"banner_b15","0", []),
+  ("banner_1_37",0,"banner_b16","0", []),
+  ("banner_1_38",0,"banner_b17","0", []),
+  ("banner_1_39",0,"banner_b18","0", []),
+  ("banner_1_40",0,"banner_b19","0", []),
+  ("banner_1_41",0,"banner_b20","0", []),
+  ("banner_1_42",0,"banner_b21","0", []),
+  ("banner_1_43",0,"banner_c01","0", []),
+  ("banner_1_44",0,"banner_c02","0", []),
+  ("banner_1_45",0,"banner_c03","0", []),
+  ("banner_1_46",0,"banner_c04","0", []),
+  ("banner_1_47",0,"banner_c05","0", []),
+  ("banner_1_48",0,"banner_c06","0", []),
+  ("banner_1_49",0,"banner_c07","0", []),
+  ("banner_1_50",0,"banner_c08","0", []),
+  ("banner_1_51",0,"banner_c09","0", []),
+  ("banner_1_52",0,"banner_c10","0", []),
+  ("banner_1_53",0,"banner_c11","0", []),
+  ("banner_1_54",0,"banner_c12","0", []),
+  ("banner_1_55",0,"banner_c13","0", []),
+  ("banner_1_56",0,"banner_c14","0", []),
+  ("banner_1_57",0,"banner_c15","0", []),
+  ("banner_1_58",0,"banner_c16","0", []),
+  ("banner_1_59",0,"banner_c17","0", []),
+  ("banner_1_60",0,"banner_c08","0", []),
+
+  ("banner_2_1",0,"banner_d12","0", []),
+  ("banner_2_2",0,"banner_d13","0", []),
+  ("banner_2_3",0,"banner_d14","0", []),
+  ("banner_2_4",0,"banner_d15","0", []),
+  ("banner_2_5",0,"banner_d16","0", []),
+  ("banner_2_6",0,"banner_d17","0", []),
+  ("banner_2_7",0,"banner_d18","0", []),
+  ("banner_2_8",0,"banner_d19","0", []),
+  ("banner_2_9",0,"banner_d20","0", []),
+  ("banner_2_10",0,"banner_d21","0", []),
+  ("banner_2_11",0,"banner_e01","0", []),
+  ("banner_2_12",0,"banner_e02","0", []),
+  ("banner_2_13",0,"banner_e03","0", []),
+  ("banner_2_14",0,"banner_e04","0", []),
+  ("banner_2_15",0,"banner_e05","0", []),
+  ("banner_2_16",0,"banner_e06","0", []),
+  ("banner_2_17",0,"banner_e07","0", []),
+  ("banner_2_18",0,"banner_e08","0", []),
+  ("banner_2_19",0,"banner_e09","0", []),
+  ("banner_2_20",0,"banner_e10","0", []),
+  ("banner_2_21",0,"banner_e11","0", []),
+  ("banner_2_22",0,"banner_e12","0", []),
+  ("banner_2_23",0,"banner_e13","0", []),
+  ("banner_2_24",0,"banner_e14","0", []),
+  ("banner_2_25",0,"banner_e15","0", []),
+  ("banner_2_26",0,"banner_e16","0", []),
+  ("banner_2_27",0,"banner_e17","0", []),
+  ("banner_2_28",0,"banner_e18","0", []),
+  ("banner_2_29",0,"banner_e19","0", []),
+  ("banner_2_30",0,"banner_e20","0", []),
+  ("banner_2_31",0,"banner_e21","0", []),
+  ("banner_2_32", 0, "banner_f01", "0", []),
+  ("banner_2_33", 0, "banner_f02", "0", []),
+  ("banner_2_34", 0, "banner_f03", "0", []),
+  ("banner_2_35", 0, "banner_f04", "0", []),
+  ("banner_2_36", 0, "banner_f05", "0", []),
+  ("banner_2_37", 0, "banner_f06", "0", []),
+  ("banner_2_38", 0, "banner_f07", "0", []),
+
+  ("banner_3_1", 0, "banner_f19", "0", []),
+  ("banner_3_2", 0, "banner_f20", "0", []),
+  ("banner_3_3", 0, "banner_f01", "0", []),
+  ("banner_3_4", 0, "banner_f02", "0", []),
+  ("banner_3_5", 0, "banner_f03", "0", []),
+  ("banner_3_6", 0, "banner_f04", "0", []),
+  ("banner_3_7", 0, "banner_f05", "0", []),
+  ("banner_3_8", 0, "banner_f06", "0", []),
+  ("banner_3_9", 0, "banner_f07", "0", []),
+  ("banner_3_10", 0, "banner_f08", "0", []),
+  ("banner_3_11", 0, "banner_f09", "0", []),
+  ("banner_3_12", 0, "banner_f10", "0", []),
+  ("banner_3_13", 0, "banner_a15", "0", []),
+  ("banner_3_14", 0, "banner_f01", "0", []),
+  ("banner_3_15", 0, "banner_f02", "0", []),
+  ("banner_3_16", 0, "banner_f03", "0", []),
+  ("banner_3_17", 0, "banner_f04", "0", []),
+  ("banner_3_18", 0, "banner_f05", "0", []),
+  ("banner_3_19", 0, "banner_f06", "0", []),
+  ("banner_3_20", 0, "banner_f07", "0", []),
+  ("banner_3_21", 0, "banner_f08", "0", []),
+  ("banner_3_22", 0, "banner_f09", "0", []),
+  ("banner_3_23", 0, "banner_f10", "0", []),
+  ("banner_3_24", 0, "banner_f11", "0", []),
+  ("banner_3_25", 0, "banner_f12", "0", []),
+  ("banner_3_26", 0, "banner_f13", "0", []),
+  ("banner_3_27", 0, "banner_f14", "0", []),
+  ("banner_3_28", 0, "banner_f15", "0", []),
+  ("banner_3_29", 0, "banner_f16", "0", []),
+  ("banner_3_30", 0, "banner_f17", "0", []),
+  ("banner_3_31", 0, "banner_f18", "0", []),
+  ("banner_3_32", 0, "banner_f19", "0", []),
+  ("banner_3_33", 0, "banner_f20", "0", []),
+  ("banner_3_34", 0, "banner_f01", "0", []),
+  ("banner_3_35", 0, "banner_f02", "0", []),
+
+  ("banner_4_1", 0, "banner_f05", "0", []),
+  ("banner_4_2", 0, "banner_f06", "0", []),
+  ("banner_4_3", 0, "banner_f07", "0", []),
+  ("banner_4_4", 0, "banner_f08", "0", []),
+  ("banner_4_5", 0, "banner_f09", "0", []),
+  ("banner_4_6", 0, "banner_f10", "0", []),
+  ("banner_4_7", 0, "banner_f11", "0", []),
+  ("banner_4_8", 0, "banner_f12", "0", []),
+  ("banner_4_9", 0, "banner_f13", "0", []),
+  ("banner_4_10", 0, "banner_f14", "0", []),
+  ("banner_4_11", 0, "banner_f15", "0", []),
+  ("banner_4_12", 0, "banner_f16", "0", []),
+  ("banner_4_13", 0, "banner_f17", "0", []),
+  ("banner_4_14", 0, "banner_f18", "0", []),
+  ("banner_4_15", 0, "banner_f19", "0", []),
+  ("banner_4_16", 0, "banner_f20", "0", []),
+  ("banner_4_17", 0, "banner_f01", "0", []),
+  ("banner_4_18", 0, "banner_f02", "0", []),
+  ("banner_4_19", 0, "banner_f03", "0", []),
+  ("banner_4_20", 0, "banner_f04", "0", []),
+  ("banner_4_21", 0, "banner_f05", "0", []),
+  ("banner_4_22", 0, "banner_f06", "0", []),
+  ("banner_4_23", 0, "banner_f07", "0", []),
+  ("banner_4_24", 0, "banner_f08", "0", []),
+  ("banner_4_25", 0, "banner_f09", "0", []),
+  ("banner_4_26", 0, "banner_f10", "0", []),
+  ("banner_4_27", 0, "banner_f01", "0", []),
+  ("banner_4_28", 0, "banner_f02", "0", []),
+  ("banner_4_29", 0, "banner_f03", "0", []),
+  ("banner_4_30", 0, "banner_f04", "0", []),
+  ("banner_4_31", 0, "banner_f05", "0", []),
+  ("banner_4_32", 0, "banner_f06", "0", []),
+  ("banner_4_33", 0, "banner_f07", "0", []),
+  ("banner_4_34", 0, "banner_f08", "0", []),
+  ("banner_4_35", 0, "banner_f09", "0", []),
+  ("banner_4_36", 0, "banner_f10", "0", []),
+  ("banner_4_37", 0, "banner_f01", "0", []),
+  ("banner_4_38", 0, "banner_f02", "0", []),
+
+  ("banner_5_1", 0, "banner_f01", "0", []),
+  ("banner_5_2", 0, "banner_f01", "0", []),
+  ("banner_5_3", 0, "banner_f01", "0", []),
+  ("banner_5_4", 0, "banner_f01", "0", []),
+  ("banner_5_5", 0, "banner_f01", "0", []),
+  ("banner_5_6", 0, "banner_f01", "0", []),
+  ("banner_5_7", 0, "banner_f01", "0", []),
+  ("banner_5_8", 0, "banner_f01", "0", []),
+  ("banner_5_9", 0, "banner_f01", "0", []),
+  ("banner_5_10", 0, "banner_f01", "0", []),
+  ("banner_5_11", 0, "banner_f01", "0", []),
+  ("banner_5_12", 0, "banner_f01", "0", []),
+  ("banner_5_13", 0, "banner_f01", "0", []),
+  ("banner_5_14", 0, "banner_f01", "0", []),
+  ("banner_5_15", 0, "banner_f01", "0", []),
+  ("banner_5_16", 0, "banner_f01", "0", []),
+  ("banner_5_17", 0, "banner_f01", "0", []),
+  ("banner_5_18", 0, "banner_f01", "0", []),
+  ("banner_5_19", 0, "banner_f01", "0", []),
+  ("banner_5_20", 0, "banner_f01", "0", []),
+  ("banner_5_21", 0, "banner_f01", "0", []),
+  ("banner_5_22", 0, "banner_f01", "0", []),
+  ("banner_5_23", 0, "banner_f01", "0", []),
+  ("banner_5_24", 0, "banner_f01", "0", []),
+  ("banner_5_25", 0, "banner_f01", "0", []),
+  ("banner_5_26", 0, "banner_f01", "0", []),
+  ("banner_5_27", 0, "banner_f01", "0", []),
+  ("banner_5_28", 0, "banner_f01", "0", []),
+  ("banner_5_29", 0, "banner_f01", "0", []),
+  ("banner_5_30", 0, "banner_f01", "0", []),
+  ("banner_5_31", 0, "banner_f01", "0", []),
+  ("banner_5_32", 0, "banner_f01", "0", []),
+  ("banner_5_33", 0, "banner_f01", "0", []),
+  ("banner_5_34", 0, "banner_f01", "0", []),
+  ("banner_5_35", 0, "banner_f01", "0", []),
+  ("banner_5_36", 0, "banner_f01", "0", []),
+  ("banner_5_37", 0, "banner_f01", "0", []),
+  ("banner_5_38", 0, "banner_f01", "0", []),
+  ("banner_5_39", 0, "banner_f01", "0", []),
+  ("banner_5_40", 0, "banner_f01", "0", []),
+  ("banner_5_41", 0, "banner_f01", "0", []),
+  ("banner_5_42", 0, "banner_f01", "0", []),
+  ("banner_5_43", 0, "banner_f01", "0", []),
+  ("banner_5_44", 0, "banner_f01", "0", []),
+  ("banner_5_45", 0, "banner_f01", "0", []),
+  ("banner_5_46", 0, "banner_f01", "0", []),
+  ("banner_5_47", 0, "banner_f01", "0", []),
+  ("banner_5_48", 0, "banner_f01", "0", []),
+  ("banner_5_49", 0, "banner_f01", "0", []),
+  ("banner_5_50", 0, "banner_f01", "0", []),
+  ("banner_5_51", 0, "banner_f01", "0", []),
+  ("banner_5_52", 0, "banner_f01", "0", []),
+  ("banner_5_53", 0, "banner_f01", "0", []),
+  ("banner_5_54", 0, "banner_f01", "0", []),
+  ("banner_5_55", 0, "banner_f01", "0", []),
+  ("banner_5_56", 0, "banner_f01", "0", []),
+  ("banner_5_57", 0, "banner_f01", "0", []),
+  ("banner_5_58", 0, "banner_f01", "0", []),
+
+  ("banner_6_1", 0, "banner_f01", "0", []),
+  ("banner_6_2", 0, "banner_f01", "0", []),
+  ("banner_6_3", 0, "banner_f01", "0", []),
+  ("banner_6_4", 0, "banner_f01", "0", []),
+  ("banner_6_5", 0, "banner_f01", "0", []),
+  ("banner_6_6", 0, "banner_f01", "0", []),
+  ("banner_6_7", 0, "banner_f01", "0", []),
+  ("banner_6_8", 0, "banner_f01", "0", []),
+  ("banner_6_9", 0, "banner_f01", "0", []),
+  ("banner_6_10", 0, "banner_f01", "0", []),
+  ("banner_6_11", 0, "banner_f01", "0", []),
+  ("banner_6_12", 0, "banner_f01", "0", []),
+  ("banner_6_13", 0, "banner_f01", "0", []),
+  ("banner_6_14", 0, "banner_f01", "0", []),
+  ("banner_6_15", 0, "banner_f01", "0", []),
+  ("banner_6_16", 0, "banner_f01", "0", []),
+  ("banner_6_17", 0, "banner_f01", "0", []),
+  ("banner_6_18", 0, "banner_f01", "0", []),
+  ("banner_6_19", 0, "banner_f01", "0", []),
+  ("banner_6_20", 0, "banner_f01", "0", []),
+  ("banner_6_21", 0, "banner_f01", "0", []),
+  ("banner_6_22", 0, "banner_f01", "0", []),
+  ("banner_6_23", 0, "banner_f01", "0", []),
+  ("banner_6_24", 0, "banner_f01", "0", []),
+  ("banner_6_25", 0, "banner_f01", "0", []),
+  ("banner_6_26", 0, "banner_f01", "0", []),
+  ("banner_6_27", 0, "banner_f01", "0", []),
+  ("banner_6_28", 0, "banner_f01", "0", []),
+  ("banner_6_29", 0, "banner_f01", "0", []),
+  ("banner_6_30", 0, "banner_f01", "0", []),
+  ("banner_6_31", 0, "banner_f01", "0", []),
+  ("banner_6_32", 0, "banner_f01", "0", []),
+  ("banner_6_33", 0, "banner_f01", "0", []),
+  ("banner_6_34", 0, "banner_f01", "0", []),
+  ("banner_6_35", 0, "banner_f01", "0", []),
+  ("banner_6_36", 0, "banner_f01", "0", []),
+  ("banner_6_37", 0, "banner_f01", "0", []),
+  ("banner_6_38", 0, "banner_f01", "0", []),
+  ("banner_6_39", 0, "banner_f01", "0", []),
+  ("banner_6_40", 0, "banner_f01", "0", []),
+  ("banner_6_41", 0, "banner_f01", "0", []),
+  ("banner_6_42", 0, "banner_f01", "0", []),
+  ("banner_6_43", 0, "banner_f01", "0", []),
+  ("banner_6_44", 0, "banner_f01", "0", []),
+  ("banner_6_45", 0, "banner_f01", "0", []),
+  ("banner_6_46", 0, "banner_f01", "0", []),
+  ("banner_6_47", 0, "banner_f01", "0", []),
+  ("banner_6_48", 0, "banner_f01", "0", []),
+  ("banner_6_49", 0, "banner_f01", "0", []),
+  ("banner_6_50", 0, "banner_f01", "0", []),
+  ("banner_6_51", 0, "banner_f01", "0", []),
+  ("banner_6_52", 0, "banner_f01", "0", []),
+  ("banner_6_53", 0, "banner_f01", "0", []),
+  ("banner_6_54", 0, "banner_f01", "0", []),
+  ("banner_6_55", 0, "banner_f01", "0", []),
+  ("banner_6_56", 0, "banner_f01", "0", []),
+  ("banner_6_57", 0, "banner_f01", "0", []),
+  ("banner_6_58", 0, "banner_f01", "0", []),
+  ("banner_6_59", 0, "banner_f01", "0", []),
+  ("banner_6_60", 0, "banner_f01", "0", []),
+  ("banner_6_61", 0, "banner_f01", "0", []),
+  ("banner_6_62", 0, "banner_f01", "0", []),
+  ("banner_6_63", 0, "banner_f01", "0", []),
+  ("banner_6_64", 0, "banner_f01", "0", []),
+  ("banner_6_65", 0, "banner_f01", "0", []),
+  ("banner_6_66", 0, "banner_f01", "0", []),
+  ("banner_6_67", 0, "banner_f01", "0", []),
+  ("banner_6_68", 0, "banner_f01", "0", []),
+  ("banner_6_69", 0, "banner_f01", "0", []),
+  ("banner_6_70", 0, "banner_f01", "0", []),
+  ("banner_6_71", 0, "banner_f01", "0", []),
+  ("banner_6_72", 0, "banner_f01", "0", []),
+  ("banner_6_73", 0, "banner_f01", "0", []),
+  ("banner_6_74", 0, "banner_f01", "0", []),
+  ("banner_6_75", 0, "banner_f01", "0", []),
+  ("banner_6_76", 0, "banner_f01", "0", []),
+  ("banner_6_77", 0, "banner_f01", "0", []),
+  ("banner_6_78", 0, "banner_f01", "0", []),
+  ("banner_6_79", 0, "banner_f01", "0", []),
+  ("banner_6_80", 0, "banner_f01", "0", []),
+  ("banner_6_81", 0, "banner_f01", "0", []),
+  ("banner_6_82", 0, "banner_f01", "0", []),
+  ("banner_6_83", 0, "banner_f01", "0", []),
+  ("banner_6_84", 0, "banner_f01", "0", []),
+  ("banner_6_85", 0, "banner_f01", "0", []),
+  ("banner_6_86", 0, "banner_f01", "0", []),
+  ("banner_6_87", 0, "banner_f01", "0", []),
+  ("banner_6_88", 0, "banner_f01", "0", []),
+  ("banner_6_89", 0, "banner_f01", "0", []),
+  ("banner_6_90", 0, "banner_f01", "0", []),
+  ("banner_6_91", 0, "banner_f01", "0", []),
+  ("banner_6_92", 0, "banner_f01", "0", []),
+  ("banner_6_93", 0, "banner_f01", "0", []),
+  ("banner_6_94", 0, "banner_f01", "0", []),
+  ("banner_6_95", 0, "banner_f01", "0", []),
+  ("banner_6_96", 0, "banner_f01", "0", []),
+  ("banner_6_97", 0, "banner_f01", "0", []),
+  ("banner_6_98", 0, "banner_f01", "0", []),
+  ("banner_6_99", 0, "banner_f01", "0", []),
+  ("banner_6_100", 0, "banner_f01", "0", []),
+  ("banner_6_101", 0, "banner_f01", "0", []),
+  ("banner_6_102", 0, "banner_f01", "0", []),
+  ("banner_6_103", 0, "banner_f01", "0", []),
+  ("banner_6_104", 0, "banner_f01", "0", []),
+  ("banner_6_105", 0, "banner_f01", "0", []),
+  ("banner_6_106", 0, "banner_f01", "0", []),
+  ("banner_6_107", 0, "banner_f01", "0", []),
+  ("banner_6_108", 0, "banner_f01", "0", []),
+  ("banner_6_109", 0, "banner_f01", "0", []),
+  ("banner_6_110", 0, "banner_f01", "0", []),
+  ("banner_6_111", 0, "banner_f01", "0", []),
+  ("banner_6_112", 0, "banner_f01", "0", []),
+  ("banner_6_113", 0, "banner_f01", "0", []),
+  ("banner_6_114", 0, "banner_f01", "0", []),
+  ("banner_6_115", 0, "banner_f01", "0", []),
+  ("banner_6_116", 0, "banner_f01", "0", []),
+  ("banner_6_117", 0, "banner_f01", "0", []),
+
+  ("banner_7_1", 0, "banner_f01", "0", []),
+  ("banner_7_2", 0, "banner_f01", "0", []),
+  ("banner_7_3", 0, "banner_f01", "0", []),
+  ("banner_7_4", 0, "banner_f01", "0", []),
+  ("banner_7_5", 0, "banner_f01", "0", []),
+  ("banner_7_6", 0, "banner_f01", "0", []),
+  ("banner_7_7", 0, "banner_f01", "0", []),
+  ("banner_7_8", 0, "banner_f01", "0", []),
+  ("banner_7_9", 0, "banner_f01", "0", []),
+  ("banner_7_10", 0, "banner_f01", "0", []),
+  ("banner_7_11", 0, "banner_f01", "0", []),
+  ("banner_7_12", 0, "banner_f01", "0", []),
+  ("banner_7_13", 0, "banner_f01", "0", []),
+  ("banner_7_14", 0, "banner_f01", "0", []),
+  ("banner_7_15", 0, "banner_f01", "0", []),
+  ("banner_7_16", 0, "banner_f01", "0", []),
+
+  ("banner_8_1", 0, "banner_f01", "0", []),
+  ("banner_8_2", 0, "banner_f01", "0", []),
+  ("banner_8_3", 0, "banner_f01", "0", []),
+  ("banner_8_4", 0, "banner_f01", "0", []),
+  ("banner_8_5", 0, "banner_f01", "0", []),
+  ("banner_8_6", 0, "banner_f01", "0", []),
+  ("banner_8_7", 0, "banner_f01", "0", []),
+  ("banner_8_8", 0, "banner_f01", "0", []),
+  ("banner_8_9", 0, "banner_f01", "0", []),
+  ("banner_8_10", 0, "banner_f01", "0", []),
+  ("banner_8_11", 0, "banner_f01", "0", []),
+
+  ("banner_kingdom_a", 0, "banner_kingdom_a", "0", []),
+  ("banner_kingdom_b", 0, "banner_kingdom_b", "0", []),
+  ("banner_kingdom_c", 0, "banner_kingdom_c", "0", []),
+  ("banner_kingdom_d", 0, "banner_kingdom_d", "0", []),
+  ("banner_kingdom_e", 0, "banner_kingdom_e", "0", []),
+  ("banner_kingdom_f", 0, "banner_kingdom_f", "0", []),
+  ("banner_m16", 0, "banner_f16", "0", []),
+
+  ("tavern_chair_a",0,"tavern_chair_a","bo_tavern_chair_a", []),
+  ("tavern_chair_b",0,"tavern_chair_b","bo_tavern_chair_b", []),
+  ("tavern_table_a",0,"tavern_table_a","bo_tavern_table_a", []),
+  ("tavern_table_b",0,"tavern_table_b","bo_tavern_table_b", []),
+  ("fireplace_a",0,"fireplace_a","bo_fireplace_a", []),
+  ("barrel",0,"barrel","bobarrel", []),
+  ("bench_tavern",0,"bench_tavern","bobench_tavern", []),
+  ("bench_tavern_b",0,"bench_tavern_b","bo_bench_tavern_b", []),
+  ("bowl_wood",0,"bowl_wood","0", []),
+  ("chandelier_table",0,"chandelier_table","0", []),
+  ("chandelier_tavern",0,"chandelier_tavern","0", []),
+  ("chest_gothic",0,"chest_gothic","bochest_gothic", []),
+  ("chest_b",0,"chest_b","bo_chest_b", []),
+  ("chest_c",0,"chest_c","bo_chest_c", []),
+  ("counter_tavern",0,"counter_tavern","bocounter_tavern", []),
+  ("cup",0,"cup","0", []),
+  ("dish_metal",0,"dish_metal","0", []),
+  ("gothic_chair",0,"gothic_chair","bo_gothic_chair", []),
+  ("gothic_stool",0,"gothic_stool","bogothic_stool", []),
+  ("grate",0,"grate","bograte", []),
+  ("jug",0,"jug","0", []),
+  ("potlamp",0,"potlamp","0", []),
+  ("weapon_rack",0,"weapon_rack","boweapon_rack", []),
+  ("weapon_rack_big",0,"weapon_rack_big","boweapon_rack_big", []),
+  ("tavern_barrel",0,"barrel","bobarrel", []),
+  ("tavern_barrel_b",0,"tavern_barrel_b","bo_tavern_barrel_b", []),
+  ("merchant_sign",0,"merchant_sign","bo_tavern_sign", []),
+  ("tavern_sign",0,"tavern_sign","bo_tavern_sign", []),
+  ("sack",0,"sack","0", []),
+  ("skull_a",0,"skull_a","0", []),
+  ("skull_b",0,"skull_b","0", []),
+  ("skull_c",0,"skull_c","0", []),
+  ("skull_d",0,"skull_d","0", []),
+  ("skeleton_cow",0,"skeleton_cow","0", []),
+  ("cupboard_a",0,"cupboard_a","bo_cupboard_a", []),
+  ("box_a",0,"box_a","bo_box_a", []),
+  ("bucket_a",0,"bucket_a","bo_bucket_a", []),
+  ("straw_a",0,"straw_a","0", []),
+  ("straw_b",0,"straw_b","0", []),
+  ("straw_c",0,"straw_c","0", []),
+  ("cloth_a",0,"cloth_a","0", []),
+  ("cloth_b",0,"cloth_b","0", []),
+  ("mat_a",0,"mat_a","0", []),
+  ("mat_b",0,"mat_b","0", []),
+  ("mat_c",0,"mat_c","0", []),
+  ("mat_d",0,"mat_d","0", []),
+
+  ("wood_a",0,"wood_a","bo_wood_a", []),
+  ("wood_b",0,"wood_b","bo_wood_b", []),
+  ("wood_heap",0,"wood_heap_a","bo_wood_heap_a", []),
+  ("wood_heap_b",0,"wood_heap_b","bo_wood_heap_b", []),
+  ("water_well_a",0,"water_well_a","bo_water_well_a", []),
+  ("net_a",0,"net_a","bo_net_a", []),
+  ("net_b",0,"net_b","0", []),
+
+  ("meat_hook",0,"meat_hook","0", []),
+  ("cooking_pole",0,"cooking_pole","0", []),
+  ("bowl_a",0,"bowl_a","0", []),
+  ("bucket_b",0,"bucket_b","0", []),
+  ("washtub_a",0,"washtub_a","bo_washtub_a", []),
+  ("washtub_b",0,"washtub_b","bo_washtub_b", []),
+
+  ("table_trunk_a",0,"table_trunk_a","bo_table_trunk_a", []),
+  ("chair_trunk_a",0,"chair_trunk_a","bo_chair_trunk_a", []),
+  ("chair_trunk_b",0,"chair_trunk_b","bo_chair_trunk_b", []),
+  ("chair_trunk_c",0,"chair_trunk_c","bo_chair_trunk_c", []),
+
+  ("table_trestle_long",0,"table_trestle_long","bo_table_trestle_long", []),
+  ("table_trestle_small",0,"table_trestle_small","bo_table_trestle_small", []),
+  ("chair_trestle",0,"chair_trestle","bo_chair_trestle", []),
+
+  ("wheel",0,"wheel","bo_wheel", []),
+  ("ladder",sokf_type_ladder,"ladder","boladder", []),
+  ("cart",0,"cart","bo_cart", []),
+  ("village_stand",0,"village_stand","bovillage_stand", []),
+  ("wooden_stand",0,"wooden_stand","bowooden_stand", []),
+  ("table_small",0,"table_small","bo_table_small", []),
+  ("table_small_b",0,"table_small_b","bo_table_small_b", []),
+  ("small_timber_frame_house_a",0,"small_timber_frame_house_a","bo_small_timber_frame_house_a", []),
+  ("timber_frame_house_b",0,"tf_house_b","bo_tf_house_b", []),
+  ("timber_frame_house_c",0,"tf_house_c","bo_tf_house_c", []),
+  ("timber_frame_extension_a",0,"timber_frame_extension_a","bo_timber_frame_extension_a", []),
+  ("timber_frame_extension_b",0,"timber_frame_extension_b","bo_timber_frame_extension_b", []),
+  ("stone_stairs_a",sokf_type_ladder,"stone_stairs_a","bo_stone_stairs_a", []),
+  ("stone_stairs_b",sokf_type_ladder,"stone_stairs_b","bo_stone_stairs_b", []),
+  ("railing_a",0,"railing_a","bo_railing_a", []),
+  ("side_building_a",0,"side_building_a","bo_side_building_a", []),
+  ("battlement_a",0,"battlement_a","bo_battlement_a", []),
+
+  ("battlement_a_destroyed",0,"battlement_a_destroyed","bo_battlement_a_destroyed", []),
+
+
+  ("round_tower_a",0,"round_tower_a","bo_round_tower_a", []),
+  ("small_round_tower_a",0,"small_round_tower_a","bo_small_round_tower_a", []),
+  ("small_round_tower_roof_a",0,"small_round_tower_roof_a","bo_small_round_tower_roof_a", []),
+  ("square_keep_a",0,"square_keep_a","bo_square_keep_a", []),
+  ("square_tower_roof_a",0,"square_tower_roof_a","0", []),
+  ("gate_house_a",0,"gate_house_a","bo_gate_house_a", []),
+  ("gate_house_b",0,"gate_house_b","bo_gate_house_b", []),
+  ("small_wall_a",0,"small_wall_a","bo_small_wall_a", []),
+  ("small_wall_b",0,"small_wall_b","bo_small_wall_b", []),
+  ("small_wall_c",0,"small_wall_c","bo_small_wall_c", []),
+  ("small_wall_c_destroy",0,"small_wall_c_destroy","bo_small_wall_c_destroy", []),
+  ("small_wall_d",0,"small_wall_d","bo_small_wall_d", []),
+  ("small_wall_e",0,"small_wall_e","bo_small_wall_d", []),
+  ("small_wall_f",0,"small_wall_f","bo_small_wall_f", []),
+  ("small_wall_f2",0,"small_wall_f2","bo_small_wall_f2", []),
+
+
+  ("town_house_a",0,"town_house_a","bo_town_house_a", []),
+  ("town_house_b",0,"town_house_b","bo_town_house_b", []),
+  ("town_house_c",0,"town_house_c","bo_town_house_c", []),
+  ("town_house_d",0,"town_house_d","bo_town_house_d", []),
+  ("town_house_e",0,"town_house_e","bo_town_house_e", []),
+  ("town_house_f",0,"town_house_f","bo_town_house_f", []),
+  ("town_house_g",0,"town_house_g","bo_town_house_g", []),
+  ("town_house_h",0,"town_house_h","bo_town_house_h", []),
+  ("town_house_i",0,"town_house_i","bo_town_house_i", []),
+  ("town_house_j",0,"town_house_j","bo_town_house_j", []),
+  ("town_house_l",0,"town_house_l","bo_town_house_l", []),
+
+  ("town_house_m",0,"town_house_m","bo_town_house_m", []),
+  ("town_house_n",0,"town_house_n","bo_town_house_n", []),
+  ("town_house_o",0,"town_house_o","bo_town_house_o", []),
+  ("town_house_p",0,"town_house_p","bo_town_house_p", []),
+  ("town_house_q",0,"town_house_q","bo_town_house_q", []),
+  
+  ("passage_house_a",0,"passage_house_a","bo_passage_house_a", []),
+  ("passage_house_b",0,"passage_house_b","bo_passage_house_b", []),
+  ("passage_house_c",0,"passage_house_c","bo_passage_house_c", []),
+  ("passage_house_d",0,"passage_house_d","bo_passage_house_d", []),
+  ("passage_house_c_door",0,"passage_house_c_door","bo_passage_house_c_door", []),
+
+  ("house_extension_a",0,"house_extension_a","bo_house_extension_a", []),
+  ("house_extension_b",0,"house_extension_b","bo_house_extension_b", []),
+  ("house_extension_c",0,"house_extension_c","bo_house_extension_a", []),#reuse 
+  ("house_extension_d",0,"house_extension_d","bo_house_extension_d", []),
+
+  ("house_extension_e",0,"house_extension_e","bo_house_extension_e", []),
+  ("house_extension_f",0,"house_extension_f","bo_house_extension_f", []),
+  ("house_extension_f2",0,"house_extension_f2","bo_house_extension_f", []),
+  ("house_extension_g",0,"house_extension_g","bo_house_extension_g", []),
+  ("house_extension_g2",0,"house_extension_g2","bo_house_extension_g", []),
+  ("house_extension_h",0,"house_extension_h","bo_house_extension_h", []),
+  ("house_extension_i",0,"house_extension_i","bo_house_extension_i", []),
+
+  ("house_roof_door",0,"house_roof_door","bo_house_roof_door", []),
+
+
+  ("door_extension_a",0,"door_extension_a","bo_door_extension_a", []),
+  ("stairs_arch_a",sokf_type_ladder,"stairs_arch_a","bo_stairs_arch_a", []),
+
+  ("town_house_r",0,"town_house_r","bo_town_house_r", []),
+  ("town_house_s",0,"town_house_s","bo_town_house_s", []),
+  ("town_house_t",0,"town_house_t","bo_town_house_t", []),
+  ("town_house_u",0,"town_house_u","bo_town_house_u", []),
+  ("town_house_v",0,"town_house_v","bo_town_house_v", []),
+  ("town_house_w",0,"town_house_w","bo_town_house_w", []),
+
+  ("town_house_y",0,"town_house_y","bo_town_house_y", []),
+  ("town_house_z",0,"town_house_z","bo_town_house_z", []),
+  ("town_house_za",0,"town_house_za","bo_town_house_za", []),
+  
+  ("windmill",0,"windmill","bo_windmill", []),
+  ("windmill_fan_turning",sokf_moveable,"windmill_fan_turning","bo_windmill_fan_turning", []),
+  ("windmill_fan",0,"windmill_fan","bo_windmill_fan", []),
+  ("fake_house_a",0,"fake_house_a","bo_fake_house_a", []),
+  ("fake_house_b",0,"fake_house_b","bo_fake_house_b", []),
+  ("fake_house_c",0,"fake_house_c","bo_fake_house_c", []),
+  ("fake_house_d",0,"fake_house_d","bo_fake_house_d", []),
+  ("fake_house_e",0,"fake_house_e","bo_fake_house_e", []),
+  ("fake_house_f",0,"fake_house_f","bo_fake_house_f", []),
+
+  ("fake_house_snowy_a",0,"fake_house_snowy_a","bo_fake_house_a", []),
+  ("fake_house_snowy_b",0,"fake_house_snowy_b","bo_fake_house_b", []),
+  ("fake_house_snowy_c",0,"fake_house_snowy_c","bo_fake_house_c", []),
+  ("fake_house_snowy_d",0,"fake_house_snowy_d","bo_fake_house_d", []),
+
+
+  ("fake_house_far_a",0,"fake_house_far_a","0", []),
+  ("fake_house_far_b",0,"fake_house_far_b","0", []),
+  ("fake_house_far_c",0,"fake_house_far_c","0", []),
+  ("fake_house_far_d",0,"fake_house_far_d","0", []),
+  ("fake_house_far_e",0,"fake_house_far_e","0", []),
+  ("fake_house_far_f",0,"fake_house_far_f","0", []),
+
+  ("fake_house_far_snowycrude_a",0,"fake_house_far_snowy_a","0", []),
+  ("fake_house_far_snowy_b",0,"fake_house_far_snowy_b","0", []),
+  ("fake_house_far_snowy_c",0,"fake_house_far_snowy_c","0", []),
+  ("fake_house_far_snowy_d",0,"fake_house_far_snowy_d","0", []),
+
+  ("earth_wall_a",0,"earth_wall_a","bo_earth_wall_a", []),
+  ("earth_wall_a2",0,"earth_wall_a2","bo_earth_wall_a2", []),
+  ("earth_wall_b",0,"earth_wall_b","bo_earth_wall_b", []),
+  ("earth_wall_b2",0,"earth_wall_b2","bo_earth_wall_b2", []),
+  ("earth_stairs_a",sokf_type_ladder,"earth_stairs_a","bo_earth_stairs_a", []),
+  ("earth_stairs_b",sokf_type_ladder,"earth_stairs_b","bo_earth_stairs_b", []),
+  ("earth_tower_small_a",0,"earth_tower_small_a","bo_earth_tower_small_a", []),
+  ("earth_gate_house_a",0,"earth_gate_house_a","bo_earth_gate_house_a", []),
+  ("earth_gate_a",0,"earth_gate_a","bo_earth_gate_a", []),
+  ("earth_square_keep_a",0,"earth_square_keep_a","bo_earth_square_keep_a", []),
+  ("earth_house_a",0,"earth_house_a","bo_earth_house_a", []),
+  ("earth_house_b",0,"earth_house_b","bo_earth_house_b", []),
+  ("earth_house_c",0,"earth_house_c","bo_earth_house_c", []),
+  ("earth_house_d",0,"earth_house_d","bo_earth_house_d", []),
+
+  ("village_steppe_a",0,"village_steppe_a","bo_village_steppe_a", []),
+  ("village_steppe_b",0,"village_steppe_b","bo_village_steppe_b", []),
+  ("village_steppe_c",0,"village_steppe_c","bo_village_steppe_c", []),
+  ("village_steppe_d",0,"village_steppe_d","bo_village_steppe_d", []),
+  ("village_steppe_e",0,"village_steppe_e","bo_village_steppe_e", []),
+  ("village_steppe_f",0,"village_steppe_f","bo_village_steppe_f", []),
+  ("town_house_aa",0,"town_house_aa","bo_town_house_aa", []),
+  
+  
+  ("snowy_house_a",0,"snowy_house_a","bo_snowy_house_a", []),
+  ("snowy_house_b",0,"snowy_house_b","bo_snowy_house_b", []),
+  ("snowy_house_c",0,"snowy_house_c","bo_snowy_house_c", []),
+  ("snowy_house_d",0,"snowy_house_d","bo_snowy_house_d", []),
+  ("snowy_house_e",0,"snowy_house_e","bo_snowy_house_e", []),
+  ("snowy_house_f",0,"snowy_house_f","bo_snowy_house_f", []),
+  ("snowy_house_g",0,"snowy_house_g","bo_snowy_house_g", []),
+  ("snowy_house_h",0,"snowy_house_h","bo_snowy_house_h", []),
+  ("snowy_house_i",0,"snowy_house_i","bo_snowy_house_i", []),
+  ("snowy_wall_a",0,"snowy_wall_a","bo_snowy_wall_a", []),
+
+  ("snowy_stand",0,"snowy_stand","bo_snowy_stand", []),
+
+  ("snowy_heap_a",0,"snowy_heap_a","bo_snowy_heap_a", []),
+  ("snowy_trunks_a",0,"snowy_trunks_a","bo_snowy_trunks_a", []),
+
+  ("snowy_castle_tower_a",0,"snowy_castle_tower_a","bo_snowy_castle_tower_a", []),
+  ("snowy_castle_battlement_a",0,"snowy_castle_battlement_a","bo_snowy_castle_battlement_a", []),
+  ("snowy_castle_battlement_a_destroyed",0,"snowy_castle_battlement_a_destroyed","bo_snowy_castle_battlement_a_destroyed", []),
+ 
+  ("snowy_castle_battlement_b",0,"snowy_castle_battlement_b","bo_snowy_castle_battlement_b", []),
+  ("snowy_castle_battlement_corner_a",0,"snowy_castle_battlement_corner_a","bo_snowy_castle_battlement_corner_a", []),
+  ("snowy_castle_battlement_corner_b",0,"snowy_castle_battlement_corner_b","bo_snowy_castle_battlement_corner_b", []),
+  ("snowy_castle_battlement_corner_c",0,"snowy_castle_battlement_corner_c","bo_snowy_castle_battlement_corner_c", []),
+  ("snowy_castle_battlement_stairs_a",0,"snowy_castle_battlement_stairs_a","bo_snowy_castle_battlement_stairs_a", []),
+  ("snowy_castle_battlement_stairs_b",0,"snowy_castle_battlement_stairs_b","bo_snowy_castle_battlement_stairs_b", []),
+  ("snowy_castle_gate_house_a",0,"snowy_castle_gate_house_a","bo_snowy_castle_gate_house_a", []),
+  ("snowy_castle_round_tower_a",0,"snowy_castle_round_tower_a","bo_snowy_castle_round_tower_a", []),
+  ("snowy_castle_square_keep_a",0,"snowy_castle_square_keep_a","bo_snowy_castle_square_keep_a", []),
+  ("snowy_castle_stairs_a",sokf_type_ladder,"snowy_castle_stairs_a","bo_snowy_castle_stairs_a", []),
+
+  ("square_keep_b",0,"square_keep_b","bo_square_keep_b", []),
+  ("square_keep_c",0,"square_keep_c","bo_square_keep_c", []),
+  ("square_keep_d",0,"square_keep_d","bo_square_keep_d", []),
+  ("square_keep_e",0,"square_keep_e","bo_square_keep_e", []),
+  ("square_keep_f",0,"square_keep_f","bo_square_keep_f", []),
+
+
+  ("square_extension_a",0,"square_extension_a","bo_square_extension_a", []),
+  ("square_stairs_a",0,"square_stairs_a","bo_square_stairs_a", []),
+
+  ("castle_courtyard_house_a",0,"castle_courtyard_house_a","bo_castle_courtyard_house_a", []),
+  ("castle_courtyard_house_b",0,"castle_courtyard_house_b","bo_castle_courtyard_house_b", []),
+  ("castle_courtyard_house_c",0,"castle_courtyard_house_c","bo_castle_courtyard_house_c", []),
+  ("castle_courtyard_a",0,"castle_courtyard_a","bo_castle_courtyard_a", []),
+
+  ("gatehouse_b",0,"gatehouse_b","bo_gatehouse_b", []),
+  ("castle_gaillard",0,"castle_gaillard","bo_castle_gaillard", []),
+  
+  ("castle_e_battlement_a",0,"castle_e_battlement_a","bo_castle_e_battlement_a", []),
+  ("castle_e_battlement_c",0,"castle_e_battlement_c","bo_castle_e_battlement_c", []),
+  ("castle_e_battlement_a_destroyed",0,"castle_e_battlement_a_destroyed","bo_castle_e_battlement_a_destroyed", []),
+
+  ("castle_e_sally_door_a",sokf_moveable|sokf_show_hit_point_bar|sokf_destructible|spr_use_time(0),"castle_e_sally_door_a","bo_castle_e_sally_door_a", [
+    check_sally_door_use_trigger,
+
+   (ti_on_init_scene_prop,
+    [
+      (store_trigger_param_1, ":instance_no"),
+      (scene_prop_set_hit_points, ":instance_no", 3000),
+    ]),
+     
+##   (ti_on_scene_prop_destroy,
+##    [
+##      (play_sound, "snd_dummy_destroyed"),
+##      
+##      (try_begin),
+##        (multiplayer_is_server),
+##        (store_trigger_param_1, ":instance_no"),      
+##        (store_trigger_param_2, ":attacker_agent_no"),
+##
+##        (try_begin),
+##          (ge, ":attacker_agent_no", 0),
+##          (prop_instance_get_position, pos1, ":instance_no"),
+##          (agent_get_position, pos2, ":attacker_agent_no"),
+##          (assign, ":rotate_side", 80),
+##          (try_begin),
+##            (position_is_behind_position, pos2, pos1),
+##            (val_mul, ":rotate_side", -1),
+##          (try_end),
+##        (else_try),
+##          (assign, ":rotate_side", 80),
+##        (try_end),
+##      
+##        (position_rotate_x, pos1, ":rotate_side"),
+##        (prop_instance_animate_to_position, ":instance_no", pos1, 70), #animate to position 1 in 0.7 second
+##      (try_end),
+##    ]),     
+
+   (ti_on_scene_prop_destroy,
+    [
+      (play_sound, "snd_dummy_destroyed"),
+      
+      (assign, ":rotate_side", 86),
+      
+      (try_begin),
+        (this_or_next|multiplayer_is_server),
+		(neg|game_in_multiplayer_mode),
+		
+        (store_trigger_param_1, ":instance_no"),      
+        (store_trigger_param_2, ":attacker_agent_no"),
+
+        (set_fixed_point_multiplier, 100),
+        (prop_instance_get_position, pos1, ":instance_no"),
+
+        (try_begin),
+          (ge, ":attacker_agent_no", 0),
+          (agent_get_position, pos2, ":attacker_agent_no"),
+          (try_begin),
+            (position_is_behind_position, pos2, pos1),
+            (val_mul, ":rotate_side", -1),
+          (try_end),
+        (try_end),
+      
+        (init_position, pos3),
+
+        (try_begin),
+          (ge, ":rotate_side", 0),
+          (position_move_y, pos3, -100),
+        (else_try),
+          (position_move_y, pos3, 100),
+        (try_end),
+      
+        (position_move_x, pos3, -50),
+        (position_transform_position_to_parent, pos4, pos1, pos3),
+        (position_move_z, pos4, 100),
+        (position_get_distance_to_ground_level, ":height_to_terrain", pos4),
+        (val_sub, ":height_to_terrain", 100),
+        (assign, ":z_difference", ":height_to_terrain"),
+        #(assign, reg0, ":z_difference"),
+        #(display_message, "@{!}z dif : {reg0}"),
+        (val_div, ":z_difference", 3),
+
+        (try_begin),
+          (ge, ":rotate_side", 0),
+          (val_add, ":rotate_side", ":z_difference"),
+        (else_try),
+          (val_sub, ":rotate_side", ":z_difference"),
+        (try_end),
+
+        (position_rotate_x, pos1, ":rotate_side"),
+        (prop_instance_animate_to_position, ":instance_no", pos1, 70), #animate to position 1 in 0.7 second
+      (try_end),
+    ]),       
+
+    (ti_on_scene_prop_hit,
+    [
+      (store_trigger_param_1, ":instance_no"),       
+      (store_trigger_param_2, ":damage"),
+      
+      (try_begin),
+        (scene_prop_get_hit_points, ":hit_points", ":instance_no"),
+        (val_sub, ":hit_points", ":damage"),
+        (gt, ":hit_points", 0),
+        (play_sound, "snd_dummy_hit"),
+      (else_try),
+        (neg|multiplayer_is_server),
+        (play_sound, "snd_dummy_destroyed"),
+      (try_end),
+
+      (try_begin),
+        (this_or_next|multiplayer_is_server),
+		(neg|game_in_multiplayer_mode),
+
+        (particle_system_burst, "psys_dummy_smoke", pos1, 3),
+        (particle_system_burst, "psys_dummy_straw", pos1, 10),
+      (try_end),      
+    ]),
+  ]),
+
+  ("castle_e_corner",0,"castle_e_corner","bo_castle_e_corner", []),
+  ("castle_e_corner_b",0,"castle_e_corner_b","bo_castle_e_corner_b", []),
+  ("castle_e_corner_c",0,"castle_e_corner_c","bo_castle_e_corner_c", []),
+  ("castle_e_stairs_a",0,"castle_e_stairs_a","bo_castle_e_stairs_a", []),
+  ("castle_e_tower",0,"castle_e_tower","bo_castle_e_tower", []),
+  ("castle_e_gate_house_a",0,"castle_e_gate_house_a","bo_castle_e_gate_house_a", []),
+  ("castle_e_keep_a",0,"castle_e_keep_a","bo_castle_e_keep_a", []),
+  ("stand_thatched",0,"stand_thatched","bo_stand_thatched", []),
+  ("stand_cloth",0,"stand_cloth","bo_stand_cloth", []),
+  ("castle_e_house_a",0,"castle_e_house_a","bo_castle_e_house_a", []),
+  ("castle_e_house_b",0,"castle_e_house_b","bo_castle_e_house_b", []),
+
+  
+  ("arena_block_a",0,"arena_block_a","bo_arena_block_ab", []),
+  ("arena_block_b",0,"arena_block_b","bo_arena_block_ab", []),
+  ("arena_block_c",0,"arena_block_c","bo_arena_block_c", []),
+  ("arena_block_d",0,"arena_block_d","bo_arena_block_def", []),
+  ("arena_block_e",0,"arena_block_e","bo_arena_block_def", []),
+  ("arena_block_f",0,"arena_block_f","bo_arena_block_def", []),
+  ("arena_block_g",0,"arena_block_g","bo_arena_block_ghi", []),
+  ("arena_block_h",0,"arena_block_h","bo_arena_block_ghi", []),
+  ("arena_block_i",0,"arena_block_i","bo_arena_block_ghi", []),
+
+  ("arena_block_j",0,"arena_block_j","bo_arena_block_j", []),
+  ("arena_block_j_awning",0,"arena_block_j_awning","bo_arena_block_j_awning", []),
+
+
+
+  ("arena_palisade_a",0,"arena_palisade_a","bo_arena_palisade_a", []),
+  ("arena_wall_a",0,"arena_wall_a","bo_arena_wall_ab", []),
+  ("arena_wall_b",0,"arena_wall_b","bo_arena_wall_ab", []),
+  ("arena_barrier_a",0,"arena_barrier_a","bo_arena_barrier_a", []),
+  ("arena_barrier_b",0,"arena_barrier_b","bo_arena_barrier_bc", []),
+  ("arena_barrier_c",0,"arena_barrier_c","bo_arena_barrier_bc", []),
+  ("arena_tower_a",0,"arena_tower_a","bo_arena_tower_abc", []),
+  ("arena_tower_b",0,"arena_tower_b","bo_arena_tower_abc", []),
+  ("arena_tower_c",0,"arena_tower_c","bo_arena_tower_abc", []),
+  ("arena_spectator_a",0,"arena_spectator_a","0", []),
+  ("arena_spectator_b",0,"arena_spectator_b","0", []),
+  ("arena_spectator_c",0,"arena_spectator_c","0", []),
+  ("arena_spectator_sitting_a",0,"arena_spectator_sitting_a","0", []),
+  ("arena_spectator_sitting_b",0,"arena_spectator_sitting_b","0", []),
+  ("arena_spectator_sitting_c",0,"arena_spectator_sitting_c","0", []),
+
+
+  ("courtyard_gate_a",0,"courtyard_entry_a","bo_courtyard_entry_a", []),
+  ("courtyard_gate_b",0,"courtyard_entry_b","bo_courtyard_entry_b", []),
+  ("courtyard_gate_c",0,"courtyard_entry_c","bo_courtyard_entry_c", []),
+  ("courtyard_gate_snowy",0,"courtyard_entry_snowy","bo_courtyard_entry_a", []),
+
+  ("castle_tower_a",0,"castle_tower_a","bo_castle_tower_a", []),
+  ("castle_battlement_a",0,"castle_battlement_a","bo_castle_battlement_a", []),
+  ("castle_battlement_b",0,"castle_battlement_b","bo_castle_battlement_b", []),
+  ("castle_battlement_c",0,"castle_battlement_c","bo_castle_battlement_c", []),
+
+  ("castle_battlement_a_destroyed",0,"castle_battlement_a_destroyed","bo_castle_battlement_a_destroyed", []),
+  ("castle_battlement_b_destroyed",0,"castle_battlement_b_destroyed","bo_castle_battlement_b_destroyed", []),
+
+  ("castle_battlement_corner_a",0,"castle_battlement_corner_a","bo_castle_battlement_corner_a", []),
+  ("castle_battlement_corner_b",0,"castle_battlement_corner_b","bo_castle_battlement_corner_b", []),
+  ("castle_battlement_corner_c",0,"castle_battlement_corner_c","bo_castle_battlement_corner_c", []),
+  ("castle_battlement_stairs_a",0,"castle_battlement_stairs_a","bo_castle_battlement_stairs_a", []),
+  ("castle_battlement_stairs_b",0,"castle_battlement_stairs_b","bo_castle_battlement_stairs_b", []),
+  ("castle_gate_house_a",0,"castle_gate_house_a","bo_castle_gate_house_a", []),
+  ("castle_round_tower_a",0,"castle_round_tower_a","bo_castle_round_tower_a", []),
+  ("castle_square_keep_a",0,"castle_square_keep_a","bo_castle_square_keep_a", []),
+  ("castle_stairs_a",sokf_type_ladder,"castle_stairs_a","bo_castle_stairs_a", []),
+
+  ("castle_drawbridge_open",0,"castle_drawbridges_open","bo_castle_drawbridges_open", []),
+  ("castle_drawbridge_closed",0,"castle_drawbridges_closed","bo_castle_drawbridges_closed", []),
+  ("spike_group_a",0,"spike_group_a","bo_spike_group_a", []),
+  ("spike_a",0,"spike_a","bo_spike_a", []),
+  ("belfry_a",sokf_moveable,"belfry_a","bo_belfry_a", []),
+
+  ("belfry_b",sokf_moveable,"belfry_b","bo_belfry_b", []),
+  ("belfry_b_platform_a",sokf_moveable,"belfry_b_platform_a","bo_belfry_b_platform_a", []),
+
+
+
+  ("belfry_old",0,"belfry_a","bo_belfry_a", []),
+  ("belfry_platform_a",sokf_moveable,"belfry_platform_a","bo_belfry_platform_a", []),
+  ("belfry_platform_b",sokf_moveable,"belfry_platform_b","bo_belfry_platform_b", []),
+  ("belfry_platform_old",0,"belfry_platform_b","bo_belfry_platform_b", []),
+  ("belfry_wheel",sokf_moveable,"belfry_wheel",0, []),
+  ("belfry_wheel_old",0,"belfry_wheel",0, []),
+
+  ("mangonel",0,"mangonel","bo_mangonel", []),
+  ("trebuchet_old",0,"trebuchet_old","bo_trebuchet_old", []),
+  ("trebuchet_new",0,"trebuchet_new","bo_trebuchet_old", []),
+
+  ("trebuchet_destructible",sokf_moveable|sokf_show_hit_point_bar|sokf_destructible,"trebuchet_new","bo_trebuchet_old", [
+   (ti_on_init_scene_prop,
+    [
+      (store_trigger_param_1, ":instance_no"),
+      (scene_prop_set_hit_points, ":instance_no", 2400),
+    ]),
+     
+   (ti_on_scene_prop_destroy,
+    [          
+      (play_sound, "snd_dummy_destroyed"),
+
+      (try_begin),
+        (this_or_next|multiplayer_is_server),
+		(neg|game_in_multiplayer_mode),
+
+        (store_trigger_param_1, ":instance_no"),      
+        (prop_instance_get_position, pos1, ":instance_no"),
+        (particle_system_burst, "psys_dummy_smoke_big", pos1, 100),
+        (particle_system_burst, "psys_dummy_straw_big", pos1, 100),      
+        (position_move_z, pos1, -500),
+        (position_rotate_x, pos1, 90),
+        (prop_instance_animate_to_position, ":instance_no", pos1, 300), #animate to 6 meters below in 6 second
+
+        (try_begin),
+          (eq, "$g_round_ended", 0),
+          (scene_prop_get_team, ":scene_prop_team_no", ":instance_no"),
+          (try_begin),
+            (eq, ":scene_prop_team_no", 0),
+            (assign, ":scene_prop_team_no_multiplier", -1), 
+          (else_try),
+            (assign, ":scene_prop_team_no_multiplier", 1), 
+          (try_end),
+
+          (try_begin),
+            (eq, "$g_number_of_targets_destroyed", 0),
+            
+            (store_mul, ":target_no_mul_scene_prop_team", ":scene_prop_team_no_multiplier", 2), #2 means destroyed object is a trebuchet
+
+            #for only server itself-----------------------------------------------------------------------------------------------                                                                                                      
+            (call_script, "script_show_multiplayer_message", multiplayer_message_type_target_destroyed, ":target_no_mul_scene_prop_team"), 
+            #for only server itself-----------------------------------------------------------------------------------------------     
+            (get_max_players, ":num_players"),                               
+            (try_for_range, ":player_no", 1, ":num_players"),
+              (player_is_active, ":player_no"),
+              (multiplayer_send_2_int_to_player, ":player_no", multiplayer_event_show_multiplayer_message, multiplayer_message_type_target_destroyed, ":target_no_mul_scene_prop_team"), 
+            (try_end),
+            (val_add, "$g_number_of_targets_destroyed", 1),
+          (else_try),
+            (store_mul, ":target_no_mul_scene_prop_team", ":scene_prop_team_no_multiplier", 9), #9 means attackers destroyed all targets
+
+            #for only server itself-----------------------------------------------------------------------------------------------      
+            (call_script, "script_show_multiplayer_message", multiplayer_message_type_target_destroyed, ":target_no_mul_scene_prop_team"), 
+            #for only server itself-----------------------------------------------------------------------------------------------     
+            (get_max_players, ":num_players"),                                
+            (try_for_range, ":player_no", 1, ":num_players"),
+              (player_is_active, ":player_no"),
+              (multiplayer_send_2_int_to_player, ":player_no", multiplayer_event_show_multiplayer_message, multiplayer_message_type_target_destroyed, ":target_no_mul_scene_prop_team"), 
+            (try_end),
+            (val_add, "$g_number_of_targets_destroyed", 1),
+          (try_end),
+        (try_end),
+
+        #giving gold for destroying target (for trebuchet)
+        #step-1 calculating total damage given to that scene prop
+        (assign, ":total_damage_given", 0),
+        (get_max_players, ":num_players"),                               
+        (try_for_range, ":player_no", 0, ":num_players"), 
+          (player_is_active, ":player_no"),
+          
+          (try_begin),
+            (eq, "spr_trebuchet_destructible", "$g_destructible_target_1"),
+            (player_get_slot, ":damage_given", ":player_no", slot_player_damage_given_to_target_1),
+          (else_try),
+            (player_get_slot, ":damage_given", ":player_no", slot_player_damage_given_to_target_2),
+          (try_end),
+
+          (val_add, ":total_damage_given", ":damage_given"),
+        (try_end),
+
+        #step-2 sharing 1000 gold (if num active players < 20 then 50 * num active players) to players which gave damage with the damage amounts.
+        #(scene_prop_get_max_hit_points, ":max_hit_points", ":instance_no"),
+        (assign, ":destroy_money_addition", 0),
+        (get_max_players, ":num_players"),                               
+        (try_for_range, ":player_no", 0, ":num_players"), 
+          (player_is_active, ":player_no"),
+          (val_add, ":destroy_money_addition", 50),
+        (try_end),
+      
+        (try_begin),
+          (ge, ":destroy_money_addition", multi_destroy_target_money_add),
+          (assign, ":destroy_money_addition", multi_destroy_target_money_add),
+        (try_end),
+        (val_mul, ":destroy_money_addition", "$g_multiplayer_battle_earnings_multiplier"),
+        (val_div, ":destroy_money_addition", 100),
+
+        (get_max_players, ":num_players"),                               
+        (try_for_range, ":player_no", 0, ":num_players"), 
+          (player_is_active, ":player_no"),
+          
+          (try_begin),
+            (eq, "spr_trebuchet_destructible", "$g_destructible_target_1"),
+            (player_get_slot, ":damage_given", ":player_no", slot_player_damage_given_to_target_1),
+          (else_try),
+            (player_get_slot, ":damage_given", ":player_no", slot_player_damage_given_to_target_2),
+          (try_end),
+
+          (player_get_gold, ":player_gold", ":player_no"), #give money to player which helped flag to be owned by new_flag_owner team
+
+          (val_mul, ":damage_given", ":destroy_money_addition"),
+          (store_div, ":gold_earned", ":damage_given", ":total_damage_given"),
+        
+          (val_add, ":player_gold", ":gold_earned"),
+          (player_set_gold, ":player_no", ":player_gold", multi_max_gold_that_can_be_stored),              
+        (try_end),      
+      (try_end),      
+    ]),     
+
+    (ti_on_scene_prop_hit,
+    [
+      (store_trigger_param_1, ":instance_no"),       
+      (store_trigger_param_2, ":damage"),
+      
+      (try_begin),
+        (scene_prop_get_hit_points, ":hit_points", ":instance_no"),
+        (val_sub, ":hit_points", ":damage"),
+        (gt, ":hit_points", 0),
+        (play_sound, "snd_dummy_hit"),
+      (else_try),
+        (neg|multiplayer_is_server),
+        (play_sound, "snd_dummy_destroyed"),
+      (try_end),
+
+      (try_begin),
+        (this_or_next|multiplayer_is_server),
+		(neg|game_in_multiplayer_mode),
+
+        (particle_system_burst, "psys_dummy_smoke", pos1, 3),
+        (particle_system_burst, "psys_dummy_straw", pos1, 10),
+
+        (set_fixed_point_multiplier, 1),
+        (position_get_x, ":attacker_agent_id", pos2),
+        (try_begin),
+          (ge, ":attacker_agent_id", 0),
+          (agent_is_alive, ":attacker_agent_id"),
+          (agent_is_human, ":attacker_agent_id"),
+          (neg|agent_is_non_player, ":attacker_agent_id"),
+          (agent_get_player_id, ":attacker_player_id", ":attacker_agent_id"),
+          (ge, ":attacker_player_id", 0),
+          (player_is_active, ":attacker_player_id"),
+          (try_begin),
+            (eq, "spr_trebuchet_destructible", "$g_destructible_target_1"),
+            (player_get_slot, ":damage_given", ":attacker_player_id", slot_player_damage_given_to_target_1),
+            (val_add, ":damage_given", ":damage"),
+            (player_set_slot, ":attacker_player_id", slot_player_damage_given_to_target_1, ":damage_given"),
+          (else_try),
+            (player_get_slot, ":damage_given", ":attacker_player_id", slot_player_damage_given_to_target_2),
+            (val_add, ":damage_given", ":damage"),
+            (player_set_slot, ":attacker_player_id", slot_player_damage_given_to_target_2, ":damage_given"),
+          (try_end),
+        (try_end),
+      (try_end),
+    ]),
+  ]),
+
+
+  ("stone_ball",0,"stone_ball","0", []),
+
+  ("village_house_a",0,"village_house_a","bo_village_house_a", []),
+  ("village_house_b",0,"village_house_b","bo_village_house_b", []),
+  ("village_house_c",0,"village_house_c","bo_village_house_c", []),
+  ("village_house_d",0,"village_house_d","bo_village_house_d", []),
+  ("farm_house_a",0,"farm_house_a","bo_farm_house_a", []),
+  ("farm_house_b",0,"farm_house_b","bo_farm_house_b", []),
+  ("farm_house_c",0,"farm_house_c","bo_farm_house_c", []),
+  ("mountain_house_a",0,"mountain_house_a","bo_mountain_house_a", []),
+  ("mountain_house_b",0,"mountain_house_b","bo_mountain_house_b", []),
+  ("village_hut_a",0,"village_hut_a","bo_village_hut_a", []),
+  ("crude_fence",0,"fence","bo_fence", []),
+  ("crude_fence_small",0,"crude_fence_small","bo_crude_fence_small", []),
+  ("crude_fence_small_b",0,"crude_fence_small_b","bo_crude_fence_small_b", []),
+  
+  ("ramp_12m",0,"ramp_12m","bo_ramp_12m", []),
+  ("ramp_14m",0,"ramp_14m","bo_ramp_14m", []),
+
+  ("siege_ladder_6m",sokf_type_ladder,"siege_ladder_move_6m","bo_siege_ladder_move_6m", []), 
+  ("siege_ladder_8m",sokf_type_ladder,"siege_ladder_move_8m","bo_siege_ladder_move_8m", []),
+  ("siege_ladder_10m",sokf_type_ladder,"siege_ladder_move_10m","bo_siege_ladder_move_10m", []),
+  ("siege_ladder_12m",sokf_type_ladder,"siege_ladder_12m","bo_siege_ladder_12m", []),
+  ("siege_ladder_14m",sokf_type_ladder,"siege_ladder_14m","bo_siege_ladder_14m", []),
+
+  ("siege_ladder_move_6m",sokf_type_ladder|sokf_moveable|spr_use_time(2),"siege_ladder_move_6m","bo_siege_ladder_move_6m", [    
+   check_item_use_trigger,
+   check_ladder_animate_trigger,
+   check_ladder_animation_finish_trigger,
+  ]),  
+
+  ("siege_ladder_move_8m",sokf_type_ladder|sokf_moveable|spr_use_time(2),"siege_ladder_move_8m","bo_siege_ladder_move_8m", [    
+   check_item_use_trigger,
+   check_ladder_animate_trigger,
+   check_ladder_animation_finish_trigger,
+  ]),  
+
+  ("siege_ladder_move_10m",sokf_type_ladder|sokf_moveable|spr_use_time(3),"siege_ladder_move_10m","bo_siege_ladder_move_10m", [    
+   check_item_use_trigger,
+   check_ladder_animate_trigger,
+   check_ladder_animation_finish_trigger,
+  ]),  
+
+  ("siege_ladder_move_12m",sokf_type_ladder|sokf_moveable|spr_use_time(3),"siege_ladder_move_12m","bo_siege_ladder_move_12m", [    
+   check_item_use_trigger,
+   check_ladder_animate_trigger,
+   check_ladder_animation_finish_trigger,
+  ]),  
+
+  ("siege_ladder_move_14m",sokf_type_ladder|sokf_moveable|spr_use_time(4),"siege_ladder_move_14m","bo_siege_ladder_move_14m", [    
+   check_item_use_trigger,
+   check_ladder_animate_trigger,
+   check_ladder_animation_finish_trigger,
+  ]),  
+
+  ("portcullis",sokf_moveable,"portcullis_a","bo_portcullis_a", []),
+  ("bed_a",0,"bed_a","bo_bed_a", []),
+  ("bed_b",0,"bed_b","bo_bed_b", []),
+  ("bed_c",0,"bed_c","bo_bed_c", []),
+  ("bed_d",0,"bed_d","bo_bed_d", []),
+  ("bed_e",0,"bed_e","bo_bed_e", []),
+
+  ("bed_f",0,"bed_f","bo_bed_f", []),
+
+  ("towngate_door_left",sokf_moveable,"door_g_left","bo_door_left", []),
+  ("towngate_door_right",sokf_moveable,"door_g_right","bo_door_right", []),
+  ("towngate_rectangle_door_left",sokf_moveable,"towngate_rectangle_door_left","bo_towngate_rectangle_door_left", []),
+  ("towngate_rectangle_door_right",sokf_moveable,"towngate_rectangle_door_right","bo_towngate_rectangle_door_right", []),
+  
+  ("door_screen",sokf_moveable,"door_screen","0", []),
+  ("door_a",sokf_moveable,"door_a","bo_door_a", []),
+  ("door_b",sokf_moveable,"door_b","bo_door_a", []),
+  ("door_c",sokf_moveable,"door_c","bo_door_a", []),
+  ("door_d",sokf_moveable,"door_d","bo_door_a", []),
+  ("tavern_door_a",sokf_moveable,"tavern_door_a","bo_tavern_door_a", []),
+  ("tavern_door_b",sokf_moveable,"tavern_door_b","bo_tavern_door_a", []),
+  ("door_e_left",sokf_moveable,"door_e_left","bo_door_left", []),
+  ("door_e_right",sokf_moveable,"door_e_right","bo_door_right", []),
+  ("door_f_left",sokf_moveable,"door_f_left","bo_door_left", []),
+  ("door_f_right",sokf_moveable,"door_f_right","bo_door_right", []),
+  ("door_h_left",sokf_moveable,"door_g_left","bo_door_left", []),
+  ("door_h_right",sokf_moveable,"door_g_right","bo_door_right", []),
+  ("draw_bridge_a",0,"draw_bridge_a","bo_draw_bridge_a", []),
+  ("chain_1m",0,"chain_1m","0", []),
+  ("chain_2m",0,"chain_2m","0", []),
+  ("chain_5m",0,"chain_5m","0", []),
+  ("chain_10m",0,"chain_10m","0", []),
+  ("bridge_modular_a",0,"bridge_modular_a","bo_bridge_modular_a", []),
+  ("bridge_modular_b",0,"bridge_modular_b","bo_bridge_modular_b", []),
+  ("church_a",0,"church_a","bo_church_a", []),
+  ("church_tower_a",0,"church_tower_a","bo_church_tower_a", []),
+  ("stone_step_a",0,"floor_stone_a","bo_floor_stone_a", []),
+  ("stone_step_b",0,"stone_step_b","0", []),
+  ("stone_step_c",0,"stone_step_c","0", []),
+  ("stone_heap",0,"stone_heap","bo_stone_heap", []),
+  ("stone_heap_b",0,"stone_heap_b","bo_stone_heap", []),
+
+  ("panel_door_a",0,"house_door_a","bo_house_door_a", []),
+  ("panel_door_b",0,"house_door_b","bo_house_door_a", []),
+  ("smoke_stain",0,"soot_a","0", []),
+  ("brazier_with_fire",0,"brazier","bo_brazier",    [
+   (ti_on_scene_prop_init,
+    [
+        (set_position_delta,0,0,85),
+        (particle_system_add_new, "psys_brazier_fire_1"),
+        (particle_system_add_new, "psys_fire_sparks_1"),
+
+        (set_position_delta,0,0,100),
+        (particle_system_add_new, "psys_fire_glow_1"),
+        (particle_system_emit, "psys_fire_glow_1",9000000),
+    ]),
+   ]),
+
+  ("cooking_fire",0,"fire_floor","0",
+   [
+   (ti_on_scene_prop_init,
+    [
+        (set_position_delta,0,0,12),
+        (particle_system_add_new, "psys_cooking_fire_1"),
+        (particle_system_add_new, "psys_fire_sparks_1"),
+        (particle_system_add_new, "psys_cooking_smoke"),
+        (set_position_delta,0,0,50),
+        (particle_system_add_new, "psys_fire_glow_1"),
+        (particle_system_emit, "psys_fire_glow_1",9000000),
+    ]),
+   ]),
+  ("cauldron_a",0,"cauldron_a","bo_cauldron_a", []),
+  ("fry_pan_a",0,"fry_pan_a","0", []),
+  ("tripod_cauldron_a",0,"tripod_cauldron_a","bo_tripod_cauldron_a", []),
+  ("tripod_cauldron_b",0,"tripod_cauldron_b","bo_tripod_cauldron_b", []),
+  ("open_stable_a",0,"open_stable_a","bo_open_stable_a", []),
+  ("open_stable_b",0,"open_stable_b","bo_open_stable_b", []),
+  ("plate_a",0,"plate_a","0", []),
+  ("plate_b",0,"plate_b","0", []),
+  ("plate_c",0,"plate_c","0", []),
+  ("lettuce",0,"lettuce","0", []),
+  ("hanger",0,"hanger","0", []),
+  ("knife_eating",0,"knife_eating","0", []),
+  ("colander",0,"colander","0", []),
+  ("ladle",0,"ladle","0", []),
+  ("spoon",0,"spoon","0", []),
+  ("skewer",0,"skewer","0", []),
+  ("grape_a",0,"grape_a","0", []),
+  ("grape_b",0,"grape_b","0", []),
+  ("apple_a",0,"apple_a","0", []),
+  ("apple_b",0,"apple_b","0", []),
+  ("maize_a",0,"maize_a","0", []),
+  ("maize_b",0,"maize_b","0", []),
+  ("cabbage",0,"cabbage","0", []),
+  ("flax_bundle",0,"raw_flax","0",[]),
+  ("olive_plane",0,"olive_plane","0",[]),
+  ("grapes_plane",0,"grapes_plane","0",[]),
+  ("date_fruit_plane",0,"date_fruit_plane","0",[]),
+  ("bowl",0,"bowl_big","0",[]),
+  ("bowl_small",0,"bowl_small","0",[]),
+  ("dye_blue",0,"raw_dye_blue","0",[]),
+  ("dye_red",0,"raw_dye_red","0",[]),
+  ("dye_yellow",0,"raw_dye_yellow","0",[]),
+  ("basket",0,"basket_small","0",[]),
+  ("basket_big",0,"basket_large","0",[]),
+  ("basket_big_green",0,"basket_big","0",[]),
+  ("leatherwork_frame",0,"leatherwork_frame","0", []),
+
+  ("cabbage_b",0,"cabbage_b","0", []),
+  ("bean",0,"bean","0", []),
+  ("basket_a",0,"basket_a","bo_basket_a", []),
+  ("feeding_trough_a",0,"feeding_trough_a","bo_feeding_trough_a", []),
+
+
+  ("marrow_a",0,"marrow_a","0", []),
+  ("marrow_b",0,"marrow_b","0", []),
+  ("squash_plant",0,"marrow_c","0", []),
+
+
+  ("gatehouse_new_a",sokf_type_ladder,"gatehouse_new_a","bo_gatehouse_new_a", []),
+  ("gatehouse_new_b",sokf_type_ladder,"gatehouse_new_b","bo_gatehouse_new_b", []),
+  ("gatehouse_new_snowy_a",0,"gatehouse_new_snowy_a","bo_gatehouse_new_b", []),
+
+  ("winch",sokf_moveable,"winch","bo_winch", []),
+  
+  ("winch_b",sokf_moveable|spr_use_time(5),"winch_b","bo_winch", [
+   (ti_on_scene_prop_use,
+    [
+      (store_trigger_param_1, ":agent_id"),
+      (store_trigger_param_2, ":instance_id"),
+
+      #for only server itself-----------------------------------------------------------------------------------------------
+      (call_script, "script_use_item", ":instance_id", ":agent_id"),
+      #for only server itself-----------------------------------------------------------------------------------------------
+      (get_max_players, ":num_players"),                               
+      (try_for_range, ":player_no", 1, ":num_players"), #0 is server so starting from 1
+        (player_is_active, ":player_no"),
+        (multiplayer_send_2_int_to_player, ":player_no", multiplayer_event_use_item, ":instance_id", ":agent_id"),
+      (try_end),
+    ]),
+  ]),
+  
+  ("drawbridge",0,"drawbridge","bo_drawbridge", []),
+  ("gatehouse_door_left",sokf_moveable,"gatehouse_door_left","bo_gatehouse_door_left", []),
+  ("gatehouse_door_right",sokf_moveable,"gatehouse_door_right","bo_gatehouse_door_right", []),
+
+  ("cheese_a",0,"cheese_a","0", []),
+  ("cheese_b",0,"cheese_b","0", []),
+  ("cheese_slice_a",0,"cheese_slice_a","0", []),
+  ("bread_a",0,"bread_a","0", []),
+  ("bread_b",0,"bread_b","0", []),
+  ("bread_slice_a",0,"bread_slice_a","0", []),
+  ("fish_a",0,"fish_a","0", []),
+  ("fish_roasted_a",0,"fish_roasted_a","0", []),
+  ("chicken_roasted",0,"chicken","0", []),
+  ("food_steam",0,"0","0",
+   [
+   (ti_on_scene_prop_init,
+    [
+     (set_position_delta,0,0,0),
+     (particle_system_add_new, "psys_food_steam"),
+    ]),
+   ]),
+  ########################
+  ("city_smoke",0,"0","0",
+   [
+   (ti_on_scene_prop_init,
+    [
+     (store_time_of_day,reg(12)),
+     (neg|is_between,reg(12),5,20),
+     (set_position_delta,0,0,0),
+     (particle_system_add_new, "psys_night_smoke_1"),
+    ]),
+   ]),
+    ("city_fire_fly_night",0,"0","0",
+   [
+   (ti_on_scene_prop_init,
+    [
+     (store_time_of_day,reg(12)),
+     (neg|is_between,reg(12),5,20),
+     (set_position_delta,0,0,0),
+     (particle_system_add_new, "psys_fire_fly_1"),
+    ]),
+   ]),
+    ("city_fly_day",0,"0","0",
+   [
+   (ti_on_scene_prop_init,
+    [
+     (particle_system_add_new, "psys_bug_fly_1"),
+    ]),
+   ]),
+    ("flue_smoke_tall",0,"0","0",
+   [
+   (ti_on_scene_prop_init,
+    [
+     (particle_system_add_new, "psys_flue_smoke_tall"),
+    ]),
+   ]),
+      ("flue_smoke_short",0,"0","0",
+   [
+   (ti_on_scene_prop_init,
+    [
+     (particle_system_add_new, "psys_flue_smoke_short"),
+    ]),
+   ]),
+      ("moon_beam",0,"0","0",
+   [
+   (ti_on_scene_prop_init,
+    [
+     (particle_system_add_new, "psys_moon_beam_1"),
+     (particle_system_add_new, "psys_moon_beam_paricle_1"),
+    ]),
+   ]),
+    ("fire_small",0,"0","0",
+   [
+   (ti_on_scene_prop_init,
+    [
+     (particle_system_add_new, "psys_fireplace_fire_small"),
+    ]),
+   ]),
+  ("fire_big",0,"0","0",
+   [
+   (ti_on_scene_prop_init,
+    [
+     (particle_system_add_new, "psys_fireplace_fire_big"),
+    ]),
+   ]),
+    ("battle_field_smoke",0,"0","0",
+   [
+   (ti_on_scene_prop_init,
+    [
+     (particle_system_add_new, "psys_war_smoke_tall"),
+    ]),
+   ]),
+      ("Village_fire_big",0,"0","0",
+   [
+   (ti_on_scene_prop_init,
+    [
+     (particle_system_add_new, "psys_village_fire_big"),
+     (set_position_delta,0,0,100),
+     (particle_system_add_new, "psys_village_fire_smoke_big"),
+    ]),
+   ]),
+  #########################
+  ("candle_a",0,"candle_a","0",
+   [
+   (ti_on_scene_prop_init,
+    [
+     (set_position_delta,0,0,27),
+     (particle_system_add_new, "psys_candle_light"),
+    ]),
+   ]),
+  ("candle_b",0,"candle_b","0",
+   [
+   (ti_on_scene_prop_init,
+    [
+     (set_position_delta,0,0,25),
+     (particle_system_add_new, "psys_candle_light"),
+    ]),
+   ]),
+  ("candle_c",0,"candle_c","0",   [
+   (ti_on_scene_prop_init,
+    [
+     (set_position_delta,0,0,10),
+     (particle_system_add_new, "psys_candle_light_small"),
+    ]),
+   ]),
+  ("lamp_a",0,"lamp_a","0",   [
+   (ti_on_scene_prop_init,
+    [
+     (set_position_delta,66,0,2),
+     (particle_system_add_new, "psys_candle_light"),
+    ]),
+   ]),
+
+  ("lamp_b",0,"lamp_b","0",   [
+   (ti_on_scene_prop_init,
+    [
+     (set_position_delta,65,0,-7),
+     (particle_system_add_new, "psys_lamp_fire"),
+     (set_position_delta,70,0,-5),
+     (particle_system_add_new, "psys_fire_glow_1"),
+     (particle_system_emit, "psys_fire_glow_1",9000000),
+     (play_sound, "snd_fire_loop", 0),
+    ]),
+   ]),
+
+  ("hook_a",0,"hook_a","0", []),
+  ("window_night",0,"window_night","0", []),
+  ("fried_pig",0,"pork","0", []),
+  ("village_oven",0,"village_oven","bo_village_oven", []),
+  ("dungeon_water_drops",0,"0","0",
+   [
+   (ti_on_scene_prop_init,
+    [
+     (particle_system_add_new, "psys_dungeon_water_drops"),
+    ]),
+   ]),
+  ("shadow_circle_1",0,"shadow_circle_1","0", []),
+  ("shadow_circle_2",0,"shadow_circle_2","0", []),
+  ("shadow_square_1",0,"shadow_square_1","0", []),
+  ("shadow_square_2",0,"shadow_square_2","0", []),
+  ("wheelbarrow",0,"wheelbarrow","bo_wheelbarrow", []),
+  ("gourd",sokf_moveable|sokf_destructible|spr_hit_points(1),"gourd","bo_gourd",
+   [
+     (ti_on_scene_prop_destroy,
+      [
+        (store_trigger_param_1, ":instance_no"),
+        (val_add, "$g_last_destroyed_gourds", 1),
+        (prop_instance_get_position, pos1, ":instance_no"),
+        (copy_position, pos2, pos1),
+        (position_set_z, pos2, -100000),
+        (particle_system_burst, "psys_gourd_smoke", pos1, 2),
+        (particle_system_burst, "psys_gourd_piece_1", pos1, 1),
+        (particle_system_burst, "psys_gourd_piece_2", pos1, 5),
+        (prop_instance_animate_to_position, ":instance_no", pos2, 1),
+        (play_sound, "snd_gourd_destroyed"),
+        ]),
+     ]),
+
+ ("gourd_spike",sokf_moveable,"gourd_spike","bo_gourd_spike",[]),
+
+ ("obstacle_fence_1",0,"fence","bo_fence", []),
+ ("obstacle_fallen_tree_a",0,"destroy_tree_a","bo_destroy_tree_a", []),
+ ("obstacle_fallen_tree_b",0,"destroy_tree_b","bo_destroy_tree_b", []),
+ ("siege_wall_a",0,"siege_wall_a","bo_siege_wall_a", []),
+ ("siege_large_shield_a",0,"siege_large_shield_a","bo_siege_large_shield_a", []),
+ ("granary_a",0,"granary_a","bo_granary_a", []),
+ ("small_wall_connect_a",0,"small_wall_connect_a","bo_small_wall_connect_a", []),
+
+ ("full_stable_a",0,"full_stable_a","bo_full_stable_a", []),
+ ("full_stable_b",0,"full_stable_b","bo_full_stable_b", []),
+ ("full_stable_c",0,"full_stable_c","bo_full_stable_c", []),
+ ("full_stable_d",0,"full_stable_d","bo_full_stable_d", []),
+
+ ("arabian_house_a",0,"arabian_house_a","bo_arabian_house_a", []),
+ ("arabian_house_b",0,"arabian_house_b","bo_arabian_house_b", []),
+ ("arabian_house_c",0,"arabian_house_c","bo_arabian_house_c", []),
+ ("arabian_house_d",0,"arabian_house_d","bo_arabian_house_d", []),
+ ("arabian_house_e",0,"arabian_house_e","bo_arabian_house_e", []),
+ ("arabian_house_f",0,"arabian_house_f","bo_arabian_house_f", []),
+ ("arabian_house_g",0,"arabian_house_g","bo_arabian_house_g", []),
+ ("arabian_house_h",0,"arabian_house_h","bo_arabian_house_h", []),
+ ("arabian_house_i",0,"arabian_house_i","bo_arabian_house_i", []),
+ ("arabian_square_keep_a",0,"arabian_square_keep_a","bo_arabian_square_keep_a", []),
+ ("arabian_passage_house_a",0,"arabian_passage_house_a","bo_arabian_passage_house_a", []),
+ ("arabian_wall_a",0,"arabian_wall_a","bo_arabian_wall_a", []),
+ ("arabian_wall_b",0,"arabian_wall_b","bo_arabian_wall_b", []),
+ ("arabian_ground_a",0,"arabian_ground_a","bo_arabian_ground_a", []),
+ ("arabian_parterre_a",0,"arabian_parterre_a","bo_arabian_parterre_a", []),
+ ("well_shaft",0,"well_shaft","bo_well_shaft", []),
+ ("horse_mill",0,"horse_mill","bo_horse_mill", []),
+ ("horse_mill_collar",0,"horse_mill_collar","bo_horse_mill_collar", []),
+ ("arabian_stable",0,"arabian_stable","bo_arabian_stable", []),
+ ("arabian_tent",0,"arabian_tent","bo_arabian_tent", []),
+ ("arabian_tent_b",0,"arabian_tent_b","bo_arabian_tent_b", []),
+ ("desert_plant_a",0,"desert_plant_a","0", []),
+
+ ("arabian_castle_battlement_a",0,"arabian_castle_battlement_a","bo_arabian_castle_battlement_a", []),
+ ("arabian_castle_battlement_b_destroyed",0,"arabian_castle_battlement_b_destroyed","bo_arabian_castle_battlement_b_destroyed", []),
+ ("arabian_castle_battlement_c",0,"arabian_castle_battlement_c","bo_arabian_castle_battlement_c", []),
+ ("arabian_castle_battlement_d",0,"arabian_castle_battlement_d","bo_arabian_castle_battlement_d", []),
+ ("arabian_castle_corner_a",0,"arabian_castle_corner_a","bo_arabian_castle_corner_a", []),
+ ("arabian_castle_stairs",sokf_type_ladder,"arabian_castle_stairs","bo_arabian_castle_stairs", []),
+ ("arabian_castle_stairs_b",sokf_type_ladder,"arabian_castle_stairs_b","bo_arabian_castle_stairs_b", []),
+ ("arabian_castle_stairs_c",sokf_type_ladder,"arabian_castle_stairs_c","bo_arabian_castle_stairs_c", []),
+ ("arabian_castle_battlement_section_a",0,"arabian_castle_battlement_section_a","bo_arabian_castle_battlement_section_a", []),
+ ("arabian_castle_gate_house_a",0,"arabian_castle_gate_house_a","bo_arabian_castle_gate_house_a", []),
+ ("arabian_castle_house_a",0,"arabian_castle_house_a","bo_arabian_castle_house_a", []),
+ ("arabian_castle_house_b",0,"arabian_castle_house_b","bo_arabian_castle_house_b", []),
+ ("arabian_castle_keep_a",0,"arabian_castle_keep_a","bo_arabian_castle_keep_a", []),
+
+
+ ("arabian_house_a2",0,"arabian_house_a2","bo_arabian_house_a2", []),
+ ("arabian_village_house_a",0,"arabian_village_house_a","bo_arabian_village_house_a", []),
+ ("arabian_village_house_b",0,"arabian_village_house_b","bo_arabian_village_house_b", []),
+ ("arabian_village_house_c",0,"arabian_village_house_c","bo_arabian_village_house_c", []),
+ ("arabian_village_house_d",0,"arabian_village_house_d","bo_arabian_village_house_d", []),
+
+ ("arabian_village_stable",0,"arabian_village_stable","bo_arabian_village_stable", []),
+ ("arabian_village_hut",0,"arabian_village_hut","bo_arabian_village_hut", []),
+ ("arabian_village_stairs",sokf_type_ladder,"arabian_village_stairs","bo_arabian_village_stairs", []),
+
+ ("tree_a01",0,"tree_a01","bo_tree_a01", []),
+
+ ("stairs_a",sokf_type_ladder,"stairs_a","bo_stairs_a", []),
+
+ ("headquarters_flag_red",sokf_moveable|sokf_face_player,"tutorial_flag_red","0", []),
+ ("headquarters_flag_blue",sokf_moveable|sokf_face_player,"tutorial_flag_blue","0", []),
+ ("headquarters_flag_gray",sokf_moveable|sokf_face_player,"tutorial_flag_yellow","0", []),  
+
+ ("headquarters_flag_red_code_only",sokf_moveable|sokf_face_player,"mp_flag_red","0", []),
+ ("headquarters_flag_blue_code_only",sokf_moveable|sokf_face_player,"mp_flag_blue","0", []),
+ ("headquarters_flag_gray_code_only",sokf_moveable|sokf_face_player,"mp_flag_white","0", []),  
+ ("headquarters_pole_code_only",sokf_moveable,"mp_flag_pole","0", []),
+
+ ("headquarters_flag_swadian",sokf_moveable|sokf_face_player,"flag_swadian","0", []),
+ ("headquarters_flag_vaegir",sokf_moveable|sokf_face_player,"flag_vaegir","0", []),
+ ("headquarters_flag_khergit",sokf_moveable|sokf_face_player,"flag_khergit","0", []),
+ ("headquarters_flag_nord",sokf_moveable|sokf_face_player,"flag_nord","0", []),
+ ("headquarters_flag_rhodok",sokf_moveable|sokf_face_player,"flag_rhodok","0", []),
+ ("headquarters_flag_sarranid",sokf_moveable|sokf_face_player,"flag_sarranid","0", []),
+
+ ("glow_a", 0, "glow_a", "0", []),
+ ("glow_b", 0, "glow_b", "0", []),
+
+ ("arabian_castle_corner_b",0,"arabian_castle_corner_b","bo_arabian_castle_corner_b", []),
+
+  ("dummy_a_undestructable",sokf_destructible,"arena_archery_target_b","bo_arena_archery_target_b",
+   [
+     (ti_on_init_scene_prop,
+      [
+        (store_trigger_param_1, ":instance_no"),
+        (scene_prop_set_hit_points, ":instance_no", 10000000),
+        ]),
+     (ti_on_scene_prop_hit,
+      [
+        (store_trigger_param_1, ":instance_no"),
+        (store_trigger_param_2, ":damage"),
+        (try_begin),
+          (set_fixed_point_multiplier, 1),
+          (position_get_x, ":attacker_agent_id", pos2),
+          (get_player_agent_no, ":player_agent"),
+          (eq, ":player_agent", ":attacker_agent_id"),
+          (assign, reg60, ":damage"),
+          (display_message, "str_delivered_damage"),
+          (eq, "$g_tutorial_training_ground_horseman_trainer_state", 6),
+          (eq, "$g_tutorial_training_ground_horseman_trainer_completed_chapters", 1),
+          (prop_instance_get_variation_id_2, ":var_id_2", ":instance_no"),
+          (val_sub, ":var_id_2", 1),
+          (eq, "$g_tutorial_training_ground_current_score", ":var_id_2"),
+          (val_add, "$g_tutorial_training_ground_current_score", 1),
+        (try_end),
+        (play_sound, "snd_dummy_hit"),
+        (particle_system_burst, "psys_dummy_smoke", pos1, 3),
+        (particle_system_burst, "psys_dummy_straw", pos1, 10),
+    ]),
+  ]),
+ ("cave_entrance_1",0,"cave_entrance_1","bo_cave_entrance_1", []),
+
+  ("pointer_arrow", 0, "pointer_arrow", "0", []),
+  ("fireplace_d_interior",0,"fireplace_d","bo_fireplace_d", []),
+  ("ship_sail_off",0,"ship_sail_off","bo_ship_sail_off", []),
+  ("ship_sail_off_b",0,"ship_sail_off_b","bo_ship_sail_off", []),
+  ("ship_c_sail_off",0,"ship_c_sail_off","bo_ship_c_sail_off", []),
+  ("ramp_small_a",0,"ramp_small_a","bo_ramp_small_a", []),
+  ("castle_g_battlement_b",0,"castle_g_battlement_b","bo_castle_g_battlement_b", []),
+  ("box_a_dynamic",sokf_moveable|sokf_dynamic_physics,"box_a","bo_box_a", []),
+
+ ("desert_field",0,"desert_field","bo_desert_field", []),
+
+ ("water_river",0,"water_plane","0", []),
+ ("viking_house_a",0,"viking_house_a","bo_viking_house_a", []),
+ ("viking_house_b",0,"viking_house_b","bo_viking_house_b", []),
+ ("viking_house_c",0,"viking_house_c","bo_viking_house_c", []),
+ ("viking_house_d",0,"viking_house_d","bo_viking_house_d", []),
+ ("viking_house_e",0,"viking_house_e","bo_viking_house_e", []),
+ ("viking_stable_a",0,"viking_stable_a","bo_viking_stable_a", []),
+ ("viking_keep",0,"viking_keep","bo_viking_keep", []),
+
+ ("viking_house_c_destroy",0,"viking_house_c_destroy","bo_viking_house_c_destroy", []),
+ ("viking_house_b_destroy",0,"viking_house_b_destroy","bo_viking_house_b_destroy", []),
+
+ ("harbour_a",0,"harbour_a","bo_harbour_a", []),
+ ("sea_foam_a",0,"0","0",
+   [
+   (ti_on_scene_prop_init,
+    [
+     (particle_system_add_new, "psys_sea_foam_a"),
+    ]),
+   ]),
+   
+ ("viking_keep_destroy",0,"viking_keep_destroy","bo_viking_keep_destroy", []),
+ ("viking_keep_destroy_door",0,"viking_keep_destroy_door","bo_viking_keep_destroy_door", []),
+ ("earth_tower_small_b",0,"earth_tower_small_b","bo_earth_tower_small_b", []),
+ ("earth_gate_house_b",0,"earth_gate_house_b","bo_earth_gate_house_b", []),
+ ("earth_tower_a",0,"earth_tower_a","bo_earth_tower_a", []),
+ ("earth_stairs_c",0,"earth_stairs_c","bo_earth_stairs_c", []),
+ 
+  ("earth_sally_gate_left",sokf_moveable|sokf_show_hit_point_bar|sokf_destructible|spr_use_time(0),"earth_sally_gate_left","bo_earth_sally_gate_left", [
+    check_sally_door_use_trigger_double,
+
+   (ti_on_init_scene_prop,
+    [
+      (store_trigger_param_1, ":instance_no"),
+      (scene_prop_set_hit_points, ":instance_no", 2000),
+    ]),
+     
+   (ti_on_scene_prop_destroy,
+    [
+      (play_sound, "snd_dummy_destroyed"),
+      
+      (assign, ":rotate_side", 86),
+      
+      (try_begin),
+        (this_or_next|multiplayer_is_server),
+		(neg|game_in_multiplayer_mode),
+
+        (store_trigger_param_1, ":instance_no"),      
+        (store_trigger_param_2, ":attacker_agent_no"),
+
+        (set_fixed_point_multiplier, 100),
+        (prop_instance_get_position, pos1, ":instance_no"),
+
+        (try_begin),
+          (ge, ":attacker_agent_no", 0),
+          (agent_get_position, pos2, ":attacker_agent_no"),
+          (try_begin),
+            (position_is_behind_position, pos2, pos1),
+            (val_mul, ":rotate_side", -1),
+          (try_end),
+        (try_end),
+      
+        (init_position, pos3),
+
+        (try_begin),
+          (ge, ":rotate_side", 0),
+          (position_move_y, pos3, -100),
+        (else_try),
+          (position_move_y, pos3, 100),
+        (try_end),
+      
+        (position_move_x, pos3, -50),
+        (position_transform_position_to_parent, pos4, pos1, pos3),
+        (position_move_z, pos4, 100),
+        (position_get_distance_to_ground_level, ":height_to_terrain", pos4),
+        (val_sub, ":height_to_terrain", 100),
+        (assign, ":z_difference", ":height_to_terrain"),
+        (val_div, ":z_difference", 3),
+
+        (try_begin),
+          (ge, ":rotate_side", 0),
+          (val_add, ":rotate_side", ":z_difference"),
+        (else_try),
+          (val_sub, ":rotate_side", ":z_difference"),
+        (try_end),
+
+        (position_rotate_x, pos1, ":rotate_side"),
+        (prop_instance_animate_to_position, ":instance_no", pos1, 70), #animate to position 1 in 0.7 second
+      (try_end),
+    ]),       
+
+    (ti_on_scene_prop_hit,
+    [
+      (store_trigger_param_1, ":instance_no"),       
+      (store_trigger_param_2, ":damage"),
+      
+      (try_begin),
+        (scene_prop_get_hit_points, ":hit_points", ":instance_no"),
+        (val_sub, ":hit_points", ":damage"),
+        (gt, ":hit_points", 0),
+        (play_sound, "snd_dummy_hit"),
+      (else_try),
+        (neg|multiplayer_is_server),
+        (play_sound, "snd_dummy_destroyed"),
+      (try_end),
+
+      (try_begin),
+        (this_or_next|multiplayer_is_server),
+		(neg|game_in_multiplayer_mode),
+
+        (particle_system_burst, "psys_dummy_smoke", pos1, 3),
+        (particle_system_burst, "psys_dummy_straw", pos1, 10),
+      (try_end),      
+    ]),
+  ]),
+
+  ("earth_sally_gate_right",sokf_moveable|sokf_show_hit_point_bar|sokf_destructible|spr_use_time(0),"earth_sally_gate_right","bo_earth_sally_gate_right", [
+    check_sally_door_use_trigger_double,
+
+   (ti_on_init_scene_prop,
+    [
+      (store_trigger_param_1, ":instance_no"),
+      (scene_prop_set_hit_points, ":instance_no", 2000),
+    ]),
+     
+   (ti_on_scene_prop_destroy,
+    [
+      (play_sound, "snd_dummy_destroyed"),
+      
+      (assign, ":rotate_side", 86),
+      
+      (try_begin),
+        (this_or_next|multiplayer_is_server),
+		(neg|game_in_multiplayer_mode),
+
+        (store_trigger_param_1, ":instance_no"),      
+        (store_trigger_param_2, ":attacker_agent_no"),
+
+        (set_fixed_point_multiplier, 100),
+        (prop_instance_get_position, pos1, ":instance_no"),
+
+        (try_begin),
+          (ge, ":attacker_agent_no", 0),
+          (agent_get_position, pos2, ":attacker_agent_no"),
+          (try_begin),
+            (position_is_behind_position, pos2, pos1),
+            (val_mul, ":rotate_side", -1),
+          (try_end),
+        (try_end),
+      
+        (init_position, pos3),
+
+        (try_begin),
+          (ge, ":rotate_side", 0),
+          (position_move_y, pos3, -100),
+        (else_try),
+          (position_move_y, pos3, 100),
+        (try_end),
+      
+        (position_move_x, pos3, -50),
+        (position_transform_position_to_parent, pos4, pos1, pos3),
+        (position_move_z, pos4, 100),
+        (position_get_distance_to_ground_level, ":height_to_terrain", pos4),
+        (val_sub, ":height_to_terrain", 100),
+        (assign, ":z_difference", ":height_to_terrain"),
+        (val_div, ":z_difference", 3),
+
+        (try_begin),
+          (ge, ":rotate_side", 0),
+          (val_add, ":rotate_side", ":z_difference"),
+        (else_try),
+          (val_sub, ":rotate_side", ":z_difference"),
+        (try_end),
+
+        (position_rotate_x, pos1, ":rotate_side"),
+        (prop_instance_animate_to_position, ":instance_no", pos1, 70), #animate to position 1 in 0.7 second
+      (try_end),
+    ]),       
+
+    (ti_on_scene_prop_hit,
+    [
+      (store_trigger_param_1, ":instance_no"),       
+      (store_trigger_param_2, ":damage"),
+      
+      (try_begin),
+        (scene_prop_get_hit_points, ":hit_points", ":instance_no"),
+        (val_sub, ":hit_points", ":damage"),
+        (gt, ":hit_points", 0),
+        (play_sound, "snd_dummy_hit"),
+      (else_try),
+        (neg|multiplayer_is_server),
+        (play_sound, "snd_dummy_destroyed"),
+      (try_end),
+
+      (try_begin),
+        (this_or_next|multiplayer_is_server),
+		(neg|game_in_multiplayer_mode),
+
+        (particle_system_burst, "psys_dummy_smoke", pos1, 3),
+        (particle_system_burst, "psys_dummy_straw", pos1, 10),
+      (try_end),      
+    ]),
+  ]),
+
+ #("earth_sally_gate_left",0,"earth_sally_gate_left","bo_earth_sally_gate_left", []),
+ #("earth_sally_gate_right",0,"earth_sally_gate_right","bo_earth_sally_gate_right", []),
+
+
+  ("barrier_box",sokf_invisible|sokf_type_barrier3d,"barrier_box","bo_barrier_box", []),
+  ("barrier_capsule",sokf_invisible|sokf_type_barrier3d,"barrier_capsule","bo_barrier_capsule", []),
+  ("barrier_cone" ,sokf_invisible|sokf_type_barrier3d,"barrier_cone" ,"bo_barrier_cone" , []),
+  ("barrier_sphere" ,sokf_invisible|sokf_type_barrier3d,"barrier_sphere" ,"bo_barrier_sphere" , []),
+
+  ("viking_keep_destroy_sally_door_right",sokf_moveable|sokf_show_hit_point_bar|sokf_destructible|spr_use_time(0),"viking_keep_destroy_sally_door_right","bo_viking_keep_destroy_sally_door_right", [
+    check_sally_door_use_trigger_double,
+
+   (ti_on_init_scene_prop,
+    [
+      (store_trigger_param_1, ":instance_no"),
+      (scene_prop_set_hit_points, ":instance_no", 3000),
+    ]),
+     
+   (ti_on_scene_prop_destroy,
+    [
+      (play_sound, "snd_dummy_destroyed"),
+      
+      (assign, ":rotate_side", 86),
+      
+      (try_begin),
+        (this_or_next|multiplayer_is_server),
+		(neg|game_in_multiplayer_mode),
+
+        (store_trigger_param_1, ":instance_no"),      
+        (store_trigger_param_2, ":attacker_agent_no"),
+
+        (set_fixed_point_multiplier, 100),
+        (prop_instance_get_position, pos1, ":instance_no"),
+
+        (try_begin),
+          (ge, ":attacker_agent_no", 0),
+          (agent_get_position, pos2, ":attacker_agent_no"),
+          (try_begin),
+            (position_is_behind_position, pos2, pos1),
+            (val_mul, ":rotate_side", -1),
+          (try_end),
+        (try_end),
+      
+        (init_position, pos3),
+
+        (try_begin),
+          (ge, ":rotate_side", 0),
+          (position_move_y, pos3, -100),
+        (else_try),
+          (position_move_y, pos3, 100),
+        (try_end),
+      
+        (position_move_x, pos3, -50),
+        (position_transform_position_to_parent, pos4, pos1, pos3),
+        (position_move_z, pos4, 100),
+        (position_get_distance_to_ground_level, ":height_to_terrain", pos4),
+        (val_sub, ":height_to_terrain", 100),
+        (assign, ":z_difference", ":height_to_terrain"),
+        (val_div, ":z_difference", 3),
+
+        (try_begin),
+          (ge, ":rotate_side", 0),
+          (val_add, ":rotate_side", ":z_difference"),
+        (else_try),
+          (val_sub, ":rotate_side", ":z_difference"),
+        (try_end),
+
+        (position_rotate_x, pos1, ":rotate_side"),
+        (prop_instance_animate_to_position, ":instance_no", pos1, 70), #animate to position 1 in 0.7 second
+      (try_end),
+    ]),       
+
+    (ti_on_scene_prop_hit,
+    [
+      (store_trigger_param_1, ":instance_no"),       
+      (store_trigger_param_2, ":damage"),
+      
+      (try_begin),
+        (scene_prop_get_hit_points, ":hit_points", ":instance_no"),
+        (val_sub, ":hit_points", ":damage"),
+        (gt, ":hit_points", 0),
+        (play_sound, "snd_dummy_hit"),
+      (else_try),
+        (neg|multiplayer_is_server),
+        (play_sound, "snd_dummy_destroyed"),
+      (try_end),
+
+      (try_begin),
+        (this_or_next|multiplayer_is_server),
+		(neg|game_in_multiplayer_mode),
+
+        (particle_system_burst, "psys_dummy_smoke", pos1, 3),
+        (particle_system_burst, "psys_dummy_straw", pos1, 10),
+      (try_end),      
+    ]),
+  ]),
+
+  ("viking_keep_destroy_sally_door_left",sokf_moveable|sokf_show_hit_point_bar|sokf_destructible|spr_use_time(0),"viking_keep_destroy_sally_door_left","bo_viking_keep_destroy_sally_door_left", [
+    check_sally_door_use_trigger_double,
+
+   (ti_on_init_scene_prop,
+    [
+      (store_trigger_param_1, ":instance_no"),
+      (scene_prop_set_hit_points, ":instance_no", 3000),
+    ]),
+     
+   (ti_on_scene_prop_destroy,
+    [
+      (play_sound, "snd_dummy_destroyed"),
+      
+      (assign, ":rotate_side", 86),
+      
+      (try_begin),
+        (this_or_next|multiplayer_is_server),
+		(neg|game_in_multiplayer_mode),
+
+        (store_trigger_param_1, ":instance_no"),      
+        (store_trigger_param_2, ":attacker_agent_no"),
+
+        (set_fixed_point_multiplier, 100),
+        (prop_instance_get_position, pos1, ":instance_no"),
+
+        (try_begin),
+          (ge, ":attacker_agent_no", 0),
+          (agent_get_position, pos2, ":attacker_agent_no"),
+          (try_begin),
+            (position_is_behind_position, pos2, pos1),
+            (val_mul, ":rotate_side", -1),
+          (try_end),
+        (try_end),
+      
+        (init_position, pos3),
+
+        (try_begin),
+          (ge, ":rotate_side", 0),
+          (position_move_y, pos3, -100),
+        (else_try),
+          (position_move_y, pos3, 100),
+        (try_end),
+      
+        (position_move_x, pos3, -50),
+        (position_transform_position_to_parent, pos4, pos1, pos3),
+        (position_move_z, pos4, 100),
+        (position_get_distance_to_ground_level, ":height_to_terrain", pos4),
+        (val_sub, ":height_to_terrain", 100),
+        (assign, ":z_difference", ":height_to_terrain"),
+        (val_div, ":z_difference", 3),
+
+        (try_begin),
+          (ge, ":rotate_side", 0),
+          (val_add, ":rotate_side", ":z_difference"),
+        (else_try),
+          (val_sub, ":rotate_side", ":z_difference"),
+        (try_end),
+
+        (position_rotate_x, pos1, ":rotate_side"),
+        (prop_instance_animate_to_position, ":instance_no", pos1, 70), #animate to position 1 in 0.7 second
+      (try_end),
+    ]),       
+
+    (ti_on_scene_prop_hit,
+    [
+      (store_trigger_param_1, ":instance_no"),       
+      (store_trigger_param_2, ":damage"),
+      
+      (try_begin),
+        (scene_prop_get_hit_points, ":hit_points", ":instance_no"),
+        (val_sub, ":hit_points", ":damage"),
+        (gt, ":hit_points", 0),
+        (play_sound, "snd_dummy_hit"),
+      (else_try),
+        (neg|multiplayer_is_server),
+        (play_sound, "snd_dummy_destroyed"),
+      (try_end),
+
+      (try_begin),
+        (this_or_next|multiplayer_is_server),
+		(neg|game_in_multiplayer_mode),
+
+        (particle_system_burst, "psys_dummy_smoke", pos1, 3),
+        (particle_system_burst, "psys_dummy_straw", pos1, 10),
+      (try_end),      
+    ]),
+  ]),
+
+  ("castle_f_door_b",sokf_moveable|sokf_show_hit_point_bar|sokf_destructible|spr_use_time(0),"castle_e_sally_door_a","bo_castle_e_sally_door_a", [
+    check_castle_door_use_trigger,
+
+   (ti_on_init_scene_prop,
+    [
+      (store_trigger_param_1, ":instance_no"),
+      (scene_prop_set_hit_points, ":instance_no", 1000),
+    ]),
+     
+   (ti_on_scene_prop_destroy,
+    [
+      (play_sound, "snd_dummy_destroyed"),
+      
+      (assign, ":rotate_side", 86),
+      
+      (try_begin),
+        (this_or_next|multiplayer_is_server),
+		(neg|game_in_multiplayer_mode),
+
+        (store_trigger_param_1, ":instance_no"),      
+        (store_trigger_param_2, ":attacker_agent_no"),
+
+        (set_fixed_point_multiplier, 100),
+        (prop_instance_get_position, pos1, ":instance_no"),
+
+        (try_begin),
+          (ge, ":attacker_agent_no", 0),
+          (agent_get_position, pos2, ":attacker_agent_no"),
+          (try_begin),
+            (position_is_behind_position, pos2, pos1),
+            (val_mul, ":rotate_side", -1),
+          (try_end),
+        (try_end),
+      
+        (init_position, pos3),
+
+        (try_begin),
+          (ge, ":rotate_side", 0),
+          (position_move_y, pos3, -100),
+        (else_try),
+          (position_move_y, pos3, 100),
+        (try_end),
+      
+        (position_move_x, pos3, -50),
+        (position_transform_position_to_parent, pos4, pos1, pos3),
+        (position_move_z, pos4, 100),
+        (position_get_distance_to_ground_level, ":height_to_terrain", pos4),
+        (val_sub, ":height_to_terrain", 100),
+        (assign, ":z_difference", ":height_to_terrain"),
+        #(assign, reg0, ":z_difference"),
+        #(display_message, "@{!}z dif : {reg0}"),
+        (val_div, ":z_difference", 3),
+
+        (try_begin),
+          (ge, ":rotate_side", 0),
+          (val_add, ":rotate_side", ":z_difference"),
+        (else_try),
+          (val_sub, ":rotate_side", ":z_difference"),
+        (try_end),
+
+        (position_rotate_x, pos1, ":rotate_side"),
+        (prop_instance_animate_to_position, ":instance_no", pos1, 70), #animate to position 1 in 0.7 second
+      (try_end),
+    ]),       
+  
+    (ti_on_scene_prop_hit,
+    [
+      (store_trigger_param_1, ":instance_no"),       
+      (store_trigger_param_2, ":damage"),
+      
+      (try_begin),
+        (scene_prop_get_hit_points, ":hit_points", ":instance_no"),
+        (val_sub, ":hit_points", ":damage"),
+        (gt, ":hit_points", 0),
+        (play_sound, "snd_dummy_hit"),
+      (else_try),
+        (neg|multiplayer_is_server),
+        (play_sound, "snd_dummy_destroyed"),
+      (try_end),
+
+      (try_begin),
+        (this_or_next|multiplayer_is_server),
+		(neg|game_in_multiplayer_mode),
+
+        (particle_system_burst, "psys_dummy_smoke", pos1, 3),
+        (particle_system_burst, "psys_dummy_straw", pos1, 10),
+      (try_end),      
+    ]),
+  ]),
+
+ ("ctf_flag_kingdom_1", sokf_moveable|sokf_face_player, "ctf_flag_kingdom_1", "0", []),
+ ("ctf_flag_kingdom_2", sokf_moveable|sokf_face_player, "ctf_flag_kingdom_2", "0", []),
+ ("ctf_flag_kingdom_3", sokf_moveable|sokf_face_player, "ctf_flag_kingdom_3", "0", []),
+ ("ctf_flag_kingdom_4", sokf_moveable|sokf_face_player, "ctf_flag_kingdom_4", "0", []),
+ ("ctf_flag_kingdom_5", sokf_moveable|sokf_face_player, "ctf_flag_kingdom_5", "0", []),
+ ("ctf_flag_kingdom_6", sokf_moveable|sokf_face_player, "ctf_flag_kingdom_6", "0", []),
+ ("ctf_flag_kingdom_7", sokf_moveable|sokf_face_player, "ctf_flag_kingdom_7", "0", []),
+
+ ("headquarters_flag_rebel",sokf_moveable|sokf_face_player,"flag_rebel","0", []),
+  ("arabian_lighthouse_a",0,"arabian_lighthouse_a","bo_arabian_lighthouse_a", []),
+  ("arabian_ramp_a",0,"arabian_ramp_a","bo_arabian_ramp_a", []),
+  ("arabian_ramp_b",0,"arabian_ramp_b","bo_arabian_ramp_b", []),
+  
+  ("winery_interior",0,"winery_interior","bo_winery_interior", []),
+  ("winery_barrel_shelf",0,"winery_barrel_shelf","bo_winery_barrel_shelf", []),
+  ("winery_wall_shelf",0,"winery_wall_shelf","bo_winery_wall_shelf", []),
+  ("winery_huge_barrel",0,"winery_huge_barrel","bo_winery_huge_barrel", []),
+  ("winery_wine_press",0,"winery_wine_press","bo_winery_wine_press", []),
+  ("winery_middle_barrel",0,"winery_middle_barrel","bo_winery_middle_barrel", []),
+  ("winery_wine_cart_small_loaded",0,"winery_wine_cart_small_loaded","bo_winery_wine_cart_small_loaded", []),
+  ("winery_wine_cart_small_empty",0,"winery_wine_cart_small_empty","bo_winery_wine_cart_small_empty", []),
+  ("winery_wine_cart_empty",0,"winery_wine_cart_empty","bo_winery_wine_cart_empty", []),
+  ("winery_wine_cart_loaded",0,"winery_wine_cart_loaded","bo_winery_wine_cart_loaded", []),
+  
+  ("weavery_interior",0,"weavery_interior","bo_weavery_interior", []),
+  ("weavery_loom_a",0,"weavery_loom_a","bo_weavery_loom_a", []),
+  ("weavery_spinning_wheel",0,"weavery_spinning_wheel","bo_weavery_spinning_wheel", []),
+  
+  ("mill_interior",0,"mill_interior","bo_mill_interior", []),
+  ("mill_flour_sack", 0,"mill_flour_sack","bo_mill_flour_sack", []),
+  ("mill_flour_sack_desk_a", 0,"mill_flour_sack_desk_a","bo_mill_flour_sack_desk_a", []),
+  ("mill_flour_sack_desk_b", 0,"mill_flour_sack_desk_b","bo_mill_flour_sack_desk_b", []),
+  
+  ("smithy_interior", 0,"smithy_interior","bo_smithy_interior", []),
+  ("smithy_grindstone_wheel", 0,"smithy_grindstone_wheel","bo_smithy_grindstone_wheel", []),
+  ("smithy_forge_bellows", 0,"smithy_forge_bellows","bo_smithy_forge_bellows", []),
+  ("smithy_forge", 0,"smithy_forge","bo_smithy_forge", []),
+  ("smithy_anvil", 0,"smithy_anvil","bo_smithy_anvil", []),
+  
+  ("tannery_hide_a", 0,"tannery_hide_a","bo_tannery_hide_a", []),
+  ("tannery_hide_b", 0,"tannery_hide_b","bo_tannery_hide_b", []),
+  ("tannery_pools_a", 0,"tannery_pools_a","bo_tannery_pools_a", []),
+  ("tannery_pools_b", 0,"tannery_pools_b","bo_tannery_pools_b", []),
+  
+
+
+
+  
+  
+ 
+
+ ("fountain", 0, "fountain", "bo_fountain", []),
+
+ ("rhodok_houses_a",0,"rhodok_houses_a","bo_rhodok_houses_a", []),
+ ("rhodok_houses_b",0,"rhodok_houses_b","bo_rhodok_houses_b", []),
+ ("rhodok_houses_c",0,"rhodok_houses_c","bo_rhodok_houses_c", []),
+ ("rhodok_houses_d",0,"rhodok_houses_d","bo_rhodok_houses_d", []),
+ ("rhodok_houses_e",0,"rhodok_houses_e","bo_rhodok_houses_e", []),
+ ("rhodok_house_passage_a",0,"rhodok_house_passage_a","bo_rhodok_house_passage_a", []),
+
+ ("bridge_b",0,"bridge_b","bo_bridge_b", []),
+ 
+("brewery_pool", 0,"brewery_pool","bo_brewery_pool", []),
+("brewery_big_bucket", 0,"brewery_big_bucket","bo_brewery_big_bucket", []),
+("brewery_interior", 0,"brewery_interior","bo_brewery_interior", []),
+("brewery_bucket_platform_a", 0,"brewery_bucket_platform_a","bo_brewery_bucket_platform_a", []),
+("brewery_bucket_platform_b", 0,"brewery_bucket_platform_b","bo_brewery_bucket_platform_b", []),
+
+
+("weavery_dye_pool_r",0,"weavery_dye_pool_r","bo_weavery_dye_pool_r", []),
+("weavery_dye_pool_y",0,"weavery_dye_pool_y","bo_weavery_dye_pool_y", []),
+("weavery_dye_pool_b",0,"weavery_dye_pool_b","bo_weavery_dye_pool_b", []),
+("weavery_dye_pool_p",0,"weavery_dye_pool_p","bo_weavery_dye_pool_p", []),
+("weavery_dye_pool_g",0,"weavery_dye_pool_g","bo_weavery_dye_pool_g", []),
+
+("oil_press_interior",0,"oil_press_interior","bo_oil_press_interior", []),
+
+    ("city_swad_01" ,0,"city_swad_01" ,"bo_city_swad_01" , []),
+    ("city_swad_02" ,0,"city_swad_02" ,"bo_city_swad_02" , []),
+    ("city_swad_03" ,0,"city_swad_03" ,"bo_city_swad_03" , []),
+    ("city_swad_04" ,0,"city_swad_04" ,"bo_city_swad_04" , []),
+    ("city_swad_passage_01" ,0,"city_swad_passage_01" ,"bo_city_swad_passage_01" , []),
+    ("city_swad_05" ,0,"city_swad_05" ,"bo_city_swad_05" , []),
+
+  ("arena_block_j_a",0,"arena_block_j_a","bo_arena_block_j_a", []),
+  ("arena_underway_a",0,"arena_underway_a","bo_arena_underway_a", []),
+  ("arena_circle_a",0,"arena_circle_a","bo_arena_circle_a", []),
+
+  ("rope_bridge_15m",0,"rope_bridge_15m","bo_rope_bridge_15m", []),
+  ("tree_house_a",0,"tree_house_a","bo_tree_house_a", []),
+  ("tree_house_guard_a",0,"tree_house_guard_a","bo_tree_house_guard_a", []),
+  ("tree_house_guard_b",0,"tree_house_guard_b","bo_tree_house_guard_b", []),
+  ("tree_shelter_a",0,"tree_shelter_a","bo_tree_shelter_a", []),
+  ("yellow_fall_leafs_a",0,"0","0",
+   [
+   (ti_on_scene_prop_init,
+    [
+     (particle_system_add_new, "psys_fall_leafs_a"),
+    ]),
+   ]),
+   
+ ("rock_bridge_a",0,"rock_bridge_a","bo_rock_bridge_a", []),
+ ("suspension_bridge_a",0,"suspension_bridge_a","bo_suspension_bridge_a", []),
+ ("mine_a",0,"mine_a","bo_mine_a", []),
+
+ ("interior_town_house_a",0,"interior_town_house_a","bo_interior_town_house_a", []),
+ ("interior_house_a",0,"interior_interior_house_a","bo_interior_house_a", []),
+ ("viking_interior_merchant_a",0,"viking_interior_merchant_a","bo_viking_interior_merchant_a", []),
+ ("viking_interior_tavern_a",0,"viking_interior_tavern_a","bo_viking_interior_tavern_a", []),
+ ("interior_house_b",0,"interior_house_b","bo_interior_house_b", []),
+ ("interior_tavern_b",0,"interior_tavern_b","bo_interior_tavern_b", []),
+ ("interior_rhodok_houses_b",0,"interior_rhodok_houses_b","bo_interior_rhodok_houses_b", []),
+ ("interior_tavern_c",0,"interior_tavern_c","bo_interior_tavern_c", []),
+ ("interior_town_house_steppe_c",0,"interior_town_house_steppe_c","bo_interior_town_house_steppe_c", []),
+ ("interior_town_house_steppe_d",0,"interior_town_house_steppe_d","bo_interior_town_house_steppe_d", []),
+ ("interior_town_house_d",0,"interior_town_house_d","bo_interior_town_house_d", []),
+ ("interior_rhodok_houses_d",0,"interior_rhodok_houses_d","bo_interior_rhodok_houses_d", []),
+ ("interior_town_house_f",0,"interior_town_house_f","bo_interior_town_house_f", []),
+ ("interior_tavern_g",0,"interior_tavern_g","bo_interior_tavern_g", []),
+ ("interior_tavern_h",0,"interior_tavern_h","bo_interior_tavern_h", []),
+ ("interior_house_extension_h",0,"interior_house_extension_h","bo_interior_house_extension_h", []),
+ ("interior_town_house_i",0,"interior_town_house_i","bo_interior_town_house_i", []),
+ ("interior_town_house_j",0,"interior_town_house_j","bo_interior_town_house_j", []),
+
+ ("castle_h_interior_a",0,"castle_h_interior_a","bo_castle_h_interior_a", []),
+ ("castle_h_interior_b",0,"castle_h_interior_b","bo_castle_h_interior_b", []),
+ ("viking_interior_keep_a",0,"viking_interior_keep_a","bo_viking_interior_keep_a", []),
+ ("arabian_interior_keep_a",0,"arabian_interior_keep_a","bo_arabian_interior_keep_a", []),
+ ("arabian_interior_keep_b",0,"arabian_interior_keep_b","bo_arabian_interior_keep_b", []),
+ ("interior_castle_g_square_keep",0,"interior_castle_g_square_keep","bo_interior_castle_g_square_keep", []),
+ ("interior_castle_n",0,"interior_castle_n","bo_interior_castle_n", []),
+ ("interior_castle_b",0,"interior_castle_b","bo_interior_castle_b", []),
+ ("interior_castle_i",0,"interior_castle_i","bo_interior_castle_i", []),
+ ("interior_castle_g",0,"interior_castle_g","bo_interior_castle_g", []),
+ ("interior_castle_w",0,"interior_castle_w","bo_interior_castle_w", []),
+ ("interior_castle_v",0,"interior_castle_v","bo_interior_castle_v", []),
+ ("interior_castle_z",0,"interior_castle_z","bo_interior_castle_z", []),
+ ("interior_castle_q",0,"interior_castle_q","bo_interior_castle_q", []),
+
+ ("dale_extension_a",0,"dale_extension_a","bo_door_extension_a", []),
+ ("dale_frame_house_a",0,"dale_frame_house_a","bo_small_timber_frame_house_a", []),
+ ("dale_extension_b",0,"dale_extension_b","bo_timber_frame_extension_b", []),
+ ("dale_house_b",0,"dale_house_b","bo_tf_house_b", []),
+ ("dale_side_building_a",0,"dale_side_building_a","bo_side_building_a_tld", []),
+ ("dale_house_c",0,"dale_house_c","bo_tf_house_c", []),
+ ("dale_cloth_awning",0,"dale_cloth_awning","bo_arena_block_j_awning", []),
+ ("dale_awning",0,"dale_awning","bo_awning", []),
+ ("dale_door_extension_a",0,"dale_door_extension_a","bo_door_extension_a", []),
+ ("dale_house_extension_a",0,"dale_house_extension_a","bo_house_extension_a", []),
+ ("dale_house_extension_b",0,"dale_house_extension_b","bo_house_extension_b", []),
+ ("dale_house_extension_c",0,"dale_house_extension_c","bo_house_extension_b", []),
+ ("dale_house_extension_d",0,"dale_house_extension_d","bo_house_extension_d", []),
+ ("dale_passage_house_a",0,"dale_passage_house_a","bo_passage_house_a", []),
+ ("dale_passage_house_b",0,"dale_passage_house_b","bo_passage_house_b", []),
+ ("dale_town_house_b",0,"dale_town_house_b","bo_town_house_b", []),
+ ("dale_town_house_d",0,"dale_town_house_d","bo_town_house_d", []),
+ ("dale_town_house_c",0,"dale_town_house_c","bo_town_house_c", []),
+ ("dale_town_house_f",0,"dale_town_house_f","bo_town_house_f", []), 
+ ("dale_town_house_g",0,"dale_town_house_g","bo_town_house_g", []),
+ ("dale_town_house_i",0,"dale_town_house_i","bo_town_house_i", []),
+ ("dale_town_house_j",0,"dale_town_house_j","bo_town_house_j", []),
+ ("dale_town_house_m",0,"dale_town_house_m","bo_town_house_m", []),
+ ("dale_town_house_n",0,"dale_town_house_n","bo_town_house_n", []),
+ ("dale_town_house_o",0,"dale_town_house_o","bo_town_house_o", []),
+ ("dale_town_house_p",0,"dale_town_house_p","bo_town_house_p", []),
+ ("dale_town_house_q",0,"dale_town_house_q","bo_town_house_q", []),
+ ("dale_town_house_s",0,"dale_town_house_s","bo_town_house_s", []),
+ ("dale_town_house_u",0,"dale_town_house_u","bo_town_house_u", []), 
+ ("dale_town_house_v",0,"dale_town_house_v","bo_town_house_v", []),
+ ("dale_town_house_y",0,"dale_town_house_y","bo_town_house_y", []),
+ ("dale_town_house_za",0,"dale_town_house_za","bo_town_house_za", []),
+ ("laketown_door_a",0,"laketown_door_a","bo_laketown_door", []),
+ ("laketown_door_b",0,"laketown_door_b","bo_laketown_door", []),
+ ("laketown_door_c",0,"laketown_door_c","bo_laketown_door", []),
+ ("esgaroth_stilts2",0,"esgaroth_stilts2","bo_esgaroth_stilts", []),
+ ("esgaroth_stilts",0,"esgaroth_stilts","bo_esgaroth_stilts", []),
+ ("esgaroth_steps",0,"esgaroth_steps","bo_esgaroth_steps", []),
+ ("laketown",0,"laketown","bo_laketown", []),
+ ("elf_ramp",0,"elf_ramp","bo_elf_ramp", []),
+ ("elf_bridge",0,"elf_bridge","bo_elf_bridge", []),
+ ("elf_treehouse",0,"elf_treehouse","bo_elf_treehouse", []),
+ ("elf_platform",0,"elf_platform","bo_elf_treehouse", []),
+
+ ("gon_castle_h_battlement_a",0,"gon_castle_h_battlement_a","bo_castle_h_battlement_a_tld", []),
+ ("gon_castle_h_corner_a",0,"gon_castle_h_corner_a","bo_castle_h_corner_a", []),
+ ("gon_castle_h_battlement_b",0,"gon_castle_h_battlement_b","bo_castle_h_battlement_b", []),
+ ("gon_castle_h_battlement_a2",0,"gon_castle_h_battlement_a2","bo_castle_h_battlement_a2", []),
+ ("gon_castle_h_battlement_b2",0,"gon_castle_h_battlement_b2","bo_castle_h_battlement_b2", []),
+ ("gon_castle_h_stairs_a",0,"gon_castle_h_stairs_a","bo_castle_h_stairs_a_tld", []),
+ ("gon_castle_h_gatehouse_a",0,"gon_castle_h_gatehouse_a","bo_castle_h_gatehouse_a_tld", []),
+ ("gon_castle_h_keep_a",0,"gon_castle_h_keep_a","bo_castle_h_keep_a", []),
+ ("gon_castle_h_house_a",0,"gon_castle_h_house_a","bo_castle_h_house_a", []),
+ ("gon_castle_h_house_b",0,"gon_castle_h_house_b","bo_castle_h_house_b", []),
+ ("gon_castle_h_house_c",0,"gon_castle_h_house_c","bo_castle_h_house_c", []),
+ ("gon_castle_h_stairs_b",0,"gon_castle_h_stairs_b","bo_castle_h_stairs_b_tld", []),
+ ("gon_small_wall_d",0,"gon_small_wall_d","bo_small_wall_d", []),
+ ("gon_castle_h_keep_b",0,"gon_castle_h_keep_b","bo_castle_h_keep_b", []),
+ ("gon_castle_h_battlement_barrier",0,"gon_castle_h_battlement_barrier","bo_castle_h_battlement_barrier", []),
+ ("gon_small_wall_e",0,"gon_small_wall_e","bo_small_wall_d", []),
+ ("gon_upper_apt_a",0,"gon_upper_apt_a","bo_castle_h_house_c", []),
+ ("gondor_large_house_3",0,"gondor_large_house_3","bo_gondor_large_house_3", []),
+ ("gondor_copula_1",0,"gondor_copula_1","bo_gondor_copula_1", []),
+ ("gondor_colonnade_1",0,"gondor_colonnade_1","bo_gondor_colonnade_1", []),
+ ("gondor_colonnade_corner_1",0,"gondor_colonnade_corner_1","bo_gondor_colonnade_corner_1", []),
+ ("gondor_copula_2",0,"gondor_copula_2","bo_gondor_copula_2", []),
+ ("gondor_copula_3",0,"gondor_copula_3","bo_gondor_copula_3", []),
+ ("gondor_house_1",0,"gondor_house_1","bo_gondor_house_1", []),
+ ("gondor_house_2",0,"gondor_house_2","bo_gondor_house_2", []),
+ ("gondor_house_3",0,"gondor_house_3","bo_gondor_house_3", []),
+ ("gondor_house_4",0,"gondor_house_4","bo_gondor_house_4", []),
+ ("gondor_house_5",0,"gondor_house_5","bo_gondor_house_5", []),
+ ("gondor_large_house_1",0,"gondor_large_house_1","bo_gondor_large_house_1", []),
+ ("gondor_large_house_2",0,"gondor_large_house_2","bo_gondor_large_house_2", []),
+ ("gondor_short_tower_1",0,"gondor_short_tower_1","bo_gondor_short_tower_1", []),
+ ("gondor_stable_1",0,"gondor_stable_1","bo_gondor_stable_1", []),
+ ("gondor_standing_colonnade_corner_1",0,"gondor_standing_colonnade_corner_1","bo_gondor_standing_colonnade_corner_1", []),
+ ("gondor_standing_colonnade_doorway_1",0,"gondor_standing_colonnade_doorway_1","bo_gondor_standing_colonnade_doorway_1", []),
+ ("gondor_standing_colonnade_end_1",0,"gondor_standing_colonnade_end_1","bo_gondor_standing_colonnade_end_1", []),
+ ("gondor_standing_colonnade_mid_1",0,"gondor_standing_colonnade_mid_1","bo_gondor_standing_colonnade_mid_1", []),
+ ("gondor_tower_1",0,"gondor_tower_1","bo_gondor_tower_1", []),
+ ("gondor_tower_2",0,"gondor_tower_2","bo_gondor_tower_2", []),
+ ("gondor_tower_3",0,"gondor_tower_3","bo_gondor_tower_3", []),
+ ("gondor_tower_4",0,"gondor_tower_4","bo_gondor_tower_4", []),
+ ("gondor_tower_5",0,"gondor_tower_5","bo_gondor_tower_5", []),
+ ("gondor_tower_6",0,"gondor_tower_6","bo_gondor_tower_6", []),
+ ("gondor_tower_7",0,"gondor_tower_7","bo_gondor_tower_7", []),
+ ("gondor_tower_part_1",0,"gondor_tower_part_1","bo_gondor_tower_part_1", []),
+ ("gondor_tower_part_2",0,"gondor_tower_part_2","bo_gondor_tower_part_2", []),
+ ("gondor_tower_part_3",0,"gondor_tower_part_3","bo_gondor_tower_part_3", []),
+ ("gondor_tower_part_4",0,"gondor_tower_part_4","bo_gondor_tower_part_4", []),
+ ("gondor_tower_part_5",0,"gondor_tower_part_5","bo_gondor_tower_part_5", []),
+ ("gondor_wall_copula_1",0,"gondor_wall_copula_1","bo_gondor_wall_copula_1", []),
+ ("gondor_citadel_main_hall_1",0,"gondor_citadel_main_hall_1","bo_gondor_citadel_main_hall_1", []),
+ ("gondor_citadel_side_building_1",0,"gondor_citadel_side_building_1","bo_gondor_citadel_side_building_1", []),
+ ("gondor_citadel_side_building_2",0,"gondor_citadel_side_building_2","bo_gondor_citadel_side_building_2", []),
+ ("gondor_citadel_side_building_3",0,"gondor_citadel_side_building_3","bo_gondor_citadel_side_building_3", []),
+ ("gondor_citadel_tower",0,"gondor_citadel_tower","bo_gondor_citadel_tower", []),
+ ("gondor_citadel_tower",0,"gondor_citadel_tower","bo_gondor_citadel_tower", []),
+ ("gondor_ship_oars",0,"gondor_ship_oars","0", []),
+ ("gondor_ship_color",0,"gondor_ship_color","bo_gondor_ship", []),
+ ("gondor_building_a_color",0,"gondor_building_a_color","bo_gondor_building_a", []),
+ ("gondor_building_b_color",0,"gondor_building_b_color","bo_gondor_building_b", []),
+ ("gondor_building_c_color",0,"gondor_building_c_color","bo_gondor_building_c", []),
+ ("gondor_tower_b_color",0,"gondor_tower_b_color","bo_gondor_tower_b", []),
+ ("ruined_wall",0,"ruined_wall","bo_ruined_wall", []),
+ ("ruined_stone",0,"ruined_stone","bo_ruined_stone", []),
+ ("ruined_arch",0,"ruined_arch","bo_ruined_arch", []),
+ ("ruined_debris_a",0,"ruined_debris_a","bo_ruined_debris_a", []),
+ ("ruined_debris_b",0,"ruined_debris_b","bo_ruined_debris_b", []),
+ ("ruined_debris_c",0,"ruined_debris_c","bo_ruined_debris_c", []),
+ ("ruined_door",0,"ruined_door","bo_ruined_door", []),
+ ("ruined_stairs_a",0,"ruined_stairs_a","bo_ruined_stairs_a", []),
+ ("ruined_stairs_b",0,"ruined_stairs_b","bo_ruined_stairs_b", []),
+ ("ruined_pillar",0,"ruined_pillar","bo_ruined_pillar", []),
+ ("ruined_arches",0,"ruined_arches","bo_ruined_arches", []),
+ ("ruined_house_a",0,"ruined_house_a","bo_ruined_house_a", []),
+ ("ruined_house_b",0,"ruined_house_b","bo_ruined_house_b", []),
+ ("ruined_house_c",0,"ruined_house_c","bo_ruined_house_c", []),
+ ("ruined_battlement",0,"ruined_battlement","bo_ruined_battlement", []),
+ ("ruined_tower",0,"ruined_tower","bo_ruined_tower", []),
+ ("ruined_wallgate",0,"ruined_wallgate","bo_ruined_wallgate", []),
+ ("ruined_bridge_a",0,"ruined_bridge_a","bo_ruined_bridge_a", []),
+ ("ruined_bridge_b",0,"ruined_bridge_b","bo_ruined_bridge_b", []),
+ ("aw_tomb",0,"aw_tomb","bo_aw_tomb", []),
+ ("gondor_wall",0,"gondor_wall","bo_gondor_wall", []),
+ ("gondor_wall_double_sided",0,"gondor_wall_double_sided","bo_gondor_wall_double_sided", []),
+ ("gondor_walls_gate_turret",0,"gondor_walls_gate_turret","bo_gondor_walls_gate_turret", []),
+ ("gondor_wall_tower",0,"gondor_wall_tower","bo_gondor_wall_tower", []),
+ ("gondor_wall_end",0,"gondor_wall_end","bo_gondor_wall_end", []),
+ ("gondor_wall_main_gate",0,"gondor_wall_main_gate","bo_gondor_wall_main_gate", []),
+ ("gondor_wall_stair",0,"gondor_wall_stair","bo_gondor_wall_stair", []),
+ ("gondor_wall_tower_med",0,"gondor_wall_tower_med","bo_gondor_wall_tower_med", []),
+ ("gondor_wall_tower_small",0,"gondor_wall_tower_small","bo_gondor_wall_tower_small", []),
+ ("tirith_gate",0,"tirith_gate","bo_tirith_gate", []),
+
+ ("mountain_scene",0,"mountain_scene","bo_mountain_scene", []),
+ ("mordormountain",0,"mordormountain","bo_mountain_scene", []),
+ ("kkk",0,"kkk","bo_mountain_scene", []),
+ ("kkk2",0,"kkk2","bo_mountain_scene", []),
+ ("hill",0,"hill","bo_mountain_scene", []),
+ ("mountains_outer(old)",0,"mountains_outer(old)","bo_mountain_scene", []),
+ ("mountains_outer",0,"mountains_outer","bo_mountain_scene", []),
+ ("mountains_outer_farther",0,"mountains_outer_farther","bo_mountain_scene", []),
+ ("mountains_outer_farther(old)",0,"mountains_outer_farther(old)","bo_mountain_scene", []),
+ ("mountains_outer_mordor(old)",0,"mountains_outer_mordor(old)","bo_mountain_scene", []),
+ ("mountains_outer_mordor",0,"mountains_outer_mordor","bo_mountain_scene", []),
+ ("skybox_cloud_overlay",0,"skybox_cloud_overlay","0", []),
+ ("mist_a",0,"mist_a","0", []),
+ ("mist_b",0,"mist_b","0", []),
+ ("outer_tirith",0,"outer_tirith","0", []),
+
+ ("small_plant",0,"small_plant","0", []),
+ ("small_plant_b",0,"small_plant_b","0", []),
+ ("small_plant_c",0,"small_plant_c","0", []),
+ ("buddy_plant",0,"buddy_plant","0", []),
+ ("buddy_plant_b",0,"buddy_plant_b","0", []),
+ ("yellow_flower",0,"yellow_flower","0", []),
+ ("yellow_flower_b",0,"yellow_flower_b","0", []),
+ ("seedy_plant_a",0,"seedy_plant_a","0", []),
+ ("ground_bush",0,"ground_bush","0", []),
+ ("beech",0,"beech","bobeech", []),
+ ("beech_b",0,"beech_b","bobeech", []),
+ ("beech_c",0,"beech_c","bobeech", []),
+ ("chestnut",0,"chestnut","bosimple_tree", []),
+ ("oak_a",0,"oak_a","bo_tree_body_7", []),
+ ("oak_b",0,"oak_b","bo_tree_body_7", []),
+ ("plane_tree_a",0,"plane_tree_a","bo_tree_body_5", []),
+ ("plane_tree_b",0,"plane_tree_b","bo_tree_body_5", []),
+ ("plane_tree_c",0,"plane_tree_c","bo_tree_body_5", []),
+ ("pine",0,"pine","bo_tree_body_5", []),
+ ("pine_b",0,"pine_b","0", []),
+ ("fir",0,"fir","bo_tree_body_5", []),
+ ("rock_a",0,"rock_a","borock_a", []),
+ ("rock_b",0,"rock_b","borock_b", []),
+ ("grass_b",0,"grass_b","0", []),
+ ("grass_yellow_a",0,"grass_yellow_a","0", []),
+ ("grass_yellow_b",0,"grass_yellow_b","0", []),
+ ("grass_c",0,"grass_c","0", []),
+ ("grass_yellow_c",0,"grass_yellow_c","0", []),
+ ("grass_yellow_d",0,"grass_yellow_d","0", []),
+ ("grass_d",0,"grass_d","0", []),
+ ("grass_e",0,"grass_e","0", []),
+ ("grass_yellow_e",0,"grass_yellow_e","0", []),
+ ("grass_a",0,"grass_a","0", []),
+ ("grass_bush_a",0,"grass_bush_a","0", []),
+ ("grass_bush_b",0,"grass_bush_b","0", []),
+ ("grass_bush_c",0,"grass_bush_c","0", []),
+ ("grass_bush_d",0,"grass_bush_d","0", []),
+ ("grass_bush_e",0,"grass_bush_e","0", []),
+ ("grass_bush_f",0,"grass_bush_f","0", []),
+ ("fern_a",0,"fern_a","0", []),
+ ("fern_b",0,"fern_b","0", []),
+ ("blue_flower",0,"blue_flower","0", []),
+ ("wheat_b",0,"wheat_b","0", []),
+ ("spiky_plant",0,"spiky_plant","0", []),
+ ("common_plant",0,"common_plant","0", []),
+ ("basak",0,"basak","0", []),
+ ("big_bush",0,"big_bush","0", []),
+ ("tree_8_a",0,"tree_8_a","bo_tree_8_a", []),
+ ("rock_i",0,"rock_i","bo_rock_i", []),
+ ("rock_k",0,"rock_k","bo_rock_k", []),
+ ("rock_c",0,"rock_c","bo_rock_c", []),
+ ("rock_d",0,"rock_d","bo_rock_d", []),
+ ("rock_e",0,"rock_e","bo_rock_e", []),
+ ("rock_f",0,"rock_f","bo_rock_f", []),
+ ("rock_g",0,"rock_g","bo_rock_g", []),
+ ("rock_h",0,"rock_h","bo_rock_h", []),
+ ("tree_stump_a",0,"tree_stump_a","bo_tree_stump_a", []),
+ ("tree_stump_b",0,"tree_stump_b","bo_tree_stump_b", []),
+ ("tree_stump_c",0,"tree_stump_c","bo_tree_stump_c", []),
+ ("bushes07_a",0,"bushes07_a","0", []),
+ ("bushes08_a",0,"bushes08_a","0", []),
+ ("bushes06_a",0,"bushes06_a","0", []),
+ ("bushes05_a",0,"bushes05_a","0", []),
+ ("bushes04_a",0,"bushes04_a","0", []),
+ ("bushes03_a",0,"bushes03_a","0", []),
+ ("bushes02_a",0,"bushes02_a","bo_bushes02_a", []),
+ ("bushes09_a",0,"bushes09_a","0", []),
+ ("bushes10_a",0,"bushes10_a","0", []),
+ ("bushes11_a",0,"bushes11_a","0", []),
+ ("bushes01_a",0,"bushes01_a","0", []),
+ ("bushes12_a",0,"bushes12_a","0", []),
+ ("bushes12_b",0,"bushes12_b","0", []),
+ ("bushes12_c",0,"bushes12_c","0", []),
+ ("bushes11_b",0,"bushes11_b","0", []),
+ ("bushes11_c",0,"bushes11_c","0", []),
+ ("bushes10_b",0,"bushes10_b","0", []),
+ ("bushes10_c",0,"bushes10_c","0", []),
+ ("bushes09_b",0,"bushes09_b","0", []),
+ ("bushes09_c",0,"bushes09_c","0", []),
+ ("bushes08_b",0,"bushes08_b","0", []),
+ ("bushes08_c",0,"bushes08_c","0", []),
+ ("bushes07_b",0,"bushes07_b","0", []),
+ ("bushes07_c",0,"bushes07_c","0", []),
+ ("bushes06_b",0,"bushes06_b","0", []),
+ ("bushes06_c",0,"bushes06_c","0", []),
+ ("bushes05_b",0,"bushes05_b","0", []),
+ ("bushes05_c",0,"bushes05_c","0", []),
+ ("bushes04_b",0,"bushes04_b","0", []),
+ ("bushes04_c",0,"bushes04_c","0", []),
+ ("bushes03_b",0,"bushes03_b","0", []),
+ ("bushes03_c",0,"bushes03_c","0", []),
+ ("bushes02_b",0,"bushes02_b","bo_bushes02_b", []),
+ ("bushes02_c",0,"bushes02_c","bo_bushes02_c", []),
+ ("tree_9_a",0,"tree_9_a","bo_tree_9_a", []),
+ ("tree_9_b",0,"tree_9_b","bo_tree_9_a", []),
+ ("tree_9_c",0,"tree_9_c","bo_tree_9_a", []),
+ ("tree_10_a",0,"tree_10_a","bo_tree_10_a", []),
+ ("tree_10_b",0,"tree_10_b","bo_tree_10_a", []),
+ ("tree_10_c",0,"tree_10_c","bo_tree_10_a", []),
+ ("tree_11_a",0,"tree_11_a","bo_tree_11_a", []),
+ ("tree_11_b",0,"tree_11_b","bo_tree_11_a", []),
+ ("tree_11_c",0,"tree_11_c","bo_tree_11_a", []),
+ ("tree_12_a",0,"tree_12_a","bo_tree_12_a", []),
+ ("tree_12_b",0,"tree_12_b","bo_tree_12_b", []),
+ ("tree_12_c",0,"tree_12_c","bo_tree_12_c", []),
+ ("grape_vineyard",0,"grape_vineyard","bo_grape_vineyard", []),
+ ("grape_vineyard_stake",0,"grape_vineyard_stake","bo_grape_vineyard_stake", []),
+ ("tree_8_b",0,"tree_8_b","bo_tree_8_b", []),
+ ("tree_8_c",0,"tree_8_c","bo_tree_8_c", []),
+ ("beech_d",0,"beech_d","bo_beech_d", []),
+ ("beech_e",0,"beech_e","bo_beech_e", []),
+ ("grass_bush_g01",0,"grass_bush_g01","0", []),
+ ("grass_bush_g02",0,"grass_bush_g02","0", []),
+ ("grass_bush_g03",0,"grass_bush_g03","0", []),
+ ("grass_bush_h01",0,"grass_bush_h01","0", []),
+ ("grass_bush_h02",0,"grass_bush_h02","0", []),
+ ("grass_bush_h03",0,"grass_bush_h03","0", []),
+ ("grass_bush_i01",0,"grass_bush_i01","0", []),
+ ("grass_bush_i02",0,"grass_bush_i02","0", []),
+ ("grass_bush_j01",0,"grass_bush_j01","0", []),
+ ("grass_bush_j02",0,"grass_bush_j02","0", []),
+ ("grass_bush_k01",0,"grass_bush_k01","0", []),
+ ("grass_bush_k02",0,"grass_bush_k02","0", []),
+ ("thorn_a",0,"thorn_a","0", []),
+ ("thorn_b",0,"thorn_b","0", []),
+ ("thorn_c",0,"thorn_c","0", []),
+ ("thorn_d",0,"thorn_d","0", []),
+ ("grass_bush_l01",0,"grass_bush_l01","0", []),
+ ("grass_bush_l02",0,"grass_bush_l02","0", []),
+ ("palm_a",0,"palm_a","bo_palm_a", []),
+ ("tree_a02",0,"tree_a02","bo_tree_a02", []),
+ ("tree_a01",0,"tree_a01","bo_tree_a01", []),
+ ("bush_a01",0,"bush_a01","0", []),
+ ("bush_a02",0,"bush_a02","0", []),
+ ("tree_b01",0,"tree_b01","bo_tree_b01", []),
+ ("bush_new_a",0,"bush_new_a","0", []),
+ ("bush_new_b",0,"bush_new_b","0", []),
+ ("bush_new_c",0,"bush_new_c","0", []),
+ ("tree_b02",0,"tree_b02","bo_tree_b02", []),
+ ("tree_c01",0,"tree_c01","bo_tree_c01", []),
+ ("tree_c02",0,"tree_c02","bo_tree_c02", []),
+ ("dry_leaves",0,"dry_leaves","0", []),
+ ("dry_bush",0,"dry_bush","0", []),
+
+ ("JB_water_plane",0,"JB_water_plane","bo_JB_water_plane", []),
+ ("JB_water_plane_b",0,"JB_water_plane_b","bo_JB_water_plane", []),
+ ("distant_mountain_snow_2",0,"distant_mountain_snow_2","bo_hill", []),
+ ("mountain2",0,"mountain2","0", []),
+ ("mountain3",0,"mountain3","0", []),
+ ("distant_mountain_snow_1",0,"distant_mountain_snow_1","0", []),
+ ("dry_bush",0,"dry_bush","0", []),
+ ("distant_mountain3",0,"distant_mountain3","0", []),
+ ("distant_mountain8",0,"distant_mountain8","0", []),
+ ("distant_mountain4",0,"distant_mountain4","0", []),
+ ("distant_street_a",0,"distant_street_a","0", []),
+ ("distant_street_b",0,"distant_street_b","0", []),
+ ("siege_ladder_evil_14m",0,"siege_ladder_evil_14m","0", []),
+ ("rope_bridge_new",0,"rope_bridge_new","0", []),
+ ("rbox_new",0,"box_new","0", []),
+
+ ("clock_1",0,"clock_1","bo_clock_1", []),
+ ("clock_2",0,"clock_2","bo_clock_1", []),
+ ("clock_3",0,"clock_3","bo_clock_3", []),
+
+ ("prision_wagon",0,"prision_wagon","bo_prision_wagon", []),#笼子
+ ("echafau",0,"echafau","bo_echafau", []),#绞刑架
+ ("radio",0,"radio","bo_radio", []),#收音机
+
+ ("radio",0,"radio","bo_radio", []),#收音机
+ ("radio",0,"radio","bo_radio", []),#收音机
+
+ ("book_on_shelves", 0, "book_on_shelves", "0", []),#书架上的书
+ ("office_book1", 0, "office_book1", "0", []),
+ ("office_book2", 0, "office_book2", "0", []),
+ ("office_book3", 0, "office_book3", "0", []),
+ ("office_books_pile1", 0, "office_books_pile1", "0", []),
+
+ ("office_cabinet1", 0, "office_cabinet1", "bo_office_cabinet1", []),#橱柜
+ ("office_filing_cabinet1", 0, "office_filing_cabinet1", "bo_office_filing_cabinet1", []),#文件柜
+ ("office_filing_cabinet2", 0, "office_filing_cabinet2", "bo_office_filing_cabinet2", []),
+ ("office_filing_cabinet3", 0, "office_filing_cabinet3", "bo_office_filing_cabinet3", []),
+
+ ("office_desk1", 0, "office_desk1", "bo_office_desk", []),#办公桌
+ ("office_desk2", 0, "office_desk2", "bo_office_desk", []),
+ ("office_desk3", 0, "office_desk3", "bo_office_desk", []),
+ ("office_desk4", 0, "office_desk4", "bo_office_desk", []),
+  ("gothic_chair_sit",0,"gothic_chair","0", []),
+
+ ("church_big",0,"church_big","0", []),
+ ("church_corridor",0,"zoulang","bo_zoulang", []),
+ ("chuich_pillar",0,"chuich_pillar","bo_chuich_pillar", []),
+ ("church_alley",0,"church_alley","bo_church_alley", []),
+ ("church_bridge",0,"church_bridge","bo_church_bridge", []),
+ ("church_decoration",0,"church_decoration","bo_church_decoration", []),
+ ("church_fence",0,"church_fence","bo_church_fence", []),
+ ("church_wall",0,"church_wall","bo_church_wall", []),
+
+ ("galleon_prop_01",0,"galleon_prop_01","bo_galleon_prop_01", []),#船
+
+ ("mission_cam", 0, "entry_arrow", "0", [#镜头
+    (ti_on_scene_prop_init,
+    [
+      (mission_cam_set_mode, 1),
+    ]),
+  ]),
+ ("sand_box",0,"outer_sand_box","0", []),
+ ("sandbox_choose_full",0,"sandbox_choose_full","0", []),
+ ("sandbox_choose_red",0,"sandbox_choose_red","0", []),
+ ("sandbox_choose_green",0,"sandbox_choose_green","0", []),
+# ("black_sky",0,"zx_black_box2","0", []),
+
+ ("sandbox_small_wall_connection_1",0,"sandbox_small_wall_connection_1","0", []),
+ ("sandbox_small_wall_connection_2",0,"sandbox_small_wall_connection_2","0", []),
+ ("sandbox_city_wall_connection_1",0,"sandbox_city_wall_connection_1","0", []),
+ ("sandbox_city_wall_connection_2",0,"ssandbox_city_wall_connection_2","0", []),
+ ("sandbox_high_wall_connection_1",0,"sandbox_city_wall_connection_1","0", []),
+ ("sandbox_high_wall_connection_2",0,"sandbox_city_wall_connection_2","0", []),
+ ("sandbox_tremendous_wall_connection_1",0,"sandbox_city_wall_connection_1","0", []),
+ ("sandbox_tremendous_wall_connection_2",0,"sandbox_city_wall_connection_2","0", []),
+
+
+  ("buoy", 0,"cup","0", [#浮标
+    (ti_on_scene_prop_init,
+    [
+      (store_trigger_param, ":instance_no", 1),
+      (prop_instance_get_position, pos1, ":instance_no"),
+      (set_fixed_point_multiplier, 100),
+      (position_get_z, "$scene_sea_level", pos1),
+    ]),
+  ]),
+
+  ("blackboard", sokf_moveable|spr_use_time(1),"drawbridge","bo_drawbridge", [#委托板
+    (ti_on_scene_prop_use,
+    [
+      (start_presentation, "prsnt_center_quest_window"),
+    ]),
+  ]),
+
+
+#特效
+ ("small_timer", 0, "co_no_head", "0", [#计时器，靠其位移为各种特效计时
+   (ti_on_scene_prop_animation_finished,
+    [
+      (store_trigger_param_1, ":timer_instance_no"),
+      (try_begin),
+         (scene_prop_get_slot, ":instance_no", ":timer_instance_no", slot_instance_prop_used),#使用者为场景物时
+         (ge, ":instance_no", 0),
+         (prop_instance_is_valid, ":instance_no"),
+         (scene_prop_get_slot, ":item_no", ":instance_no", slot_instance_item),
+         (try_begin),
+            (le, ":item_no", 0),#无原型item，为正规spr
+#            (prop_instance_get_scene_prop_kind, ":scene_prop_no", ":instance_no"),
+            (neg|scene_prop_slot_ge, ":instance_no", slot_instance_stage, 2),#使用结束
+            (set_fixed_point_multiplier, 100),
+            (scene_prop_set_visibility, ":instance_no", 0),
+            (prop_instance_get_position, pos1, ":instance_no"),
+            (position_move_z, pos1, -10000),
+            (prop_instance_set_position, ":instance_no", pos1),#隐藏并移动到地底
+            (prop_instance_clear_attached_missiles, ":instance_no"),#清除其上插着的远程武器
+            (prop_instance_stop_all_particle_systems, ":instance_no"),#清除粒子效果
+            (scene_prop_get_slot, ":agent_no", ":instance_no", slot_instance_agent_used),
+            (scene_prop_set_slot, ":instance_no", slot_instance_agent_used, -1),
+
+         (else_try),
+            (eq, ":item_no", "itm_blood_explosion"),#血爆
+            (prop_instance_get_position, pos1, ":instance_no"),
+            (set_fixed_point_multiplier, 100),
+            (try_for_agents, ":agent_no", pos1, 900),#九米
+               (agent_is_alive, ":agent_no"),
+               (agent_deliver_damage_to_agent, ":agent_no", ":agent_no", 90),#造成伤害
+               (call_script, "script_proceed_state", ":agent_no", "itm_state_blood_burst", 3),#施加三层血潮汹涌,
+            (try_end),
+
+         (else_try),
+            (eq, ":item_no", "itm_blood_overflow"),#血溢
+            (prop_instance_get_position, pos1, ":instance_no"),
+            (set_fixed_point_multiplier, 100),
+            (try_for_agents, ":agent_no", pos1, 500),#五米
+               (agent_is_alive, ":agent_no"),
+               (agent_deliver_damage_to_agent, ":agent_no", ":agent_no", 50),#造成伤害
+               (call_script, "script_proceed_state", ":agent_no", "itm_state_blood_burst", 1),#施加一层血潮汹涌,
+            (try_end),
+
+         (else_try),
+            (eq, ":item_no", "itm_skeleton_giant"),#不死组合巨人
+            (prop_instance_get_position, pos1, ":instance_no"),
+            (set_fixed_point_multiplier, 100),
+            (position_move_y, pos1, 1200),
+            (position_move_x, pos1, 340),
+            (particle_system_burst, "psys_normal_splash", pos1, 100),
+            (play_sound_at_position, "snd_hit_ground", pos1),
+            (scene_prop_get_slot, ":user_agent_no", ":instance_no", slot_instance_agent_used),#发动者
+            (agent_get_horse, ":user_horse_agent", ":user_agent_no"),#坐骑
+            (try_for_agents, ":agent_no", pos1, 600),#六米
+               (agent_is_alive, ":agent_no"),
+               (neq, ":agent_no", ":user_agent_no"),
+               (neq, ":agent_no", ":user_horse_agent"),
+               (agent_deliver_damage_to_agent, ":user_agent_no", ":agent_no", 200),#造成伤害
+            (try_end),
+
+         (else_try),
+            (eq, ":item_no", "itm_skeleton_giant_sword"),#剑骸组合巨人
+            (prop_instance_get_position, pos1, ":instance_no"),
+            (set_fixed_point_multiplier, 100),
+            (position_move_y, pos1, 1300),
+            (particle_system_burst, "psys_normal_splash", pos1, 100),
+            (play_sound_at_position, "snd_hit_ground", pos1),
+            (scene_prop_get_slot, ":user_agent_no", ":instance_no", slot_instance_agent_used),#发动者
+            (agent_get_horse, ":user_horse_agent", ":user_agent_no"),#坐骑
+            (try_for_agents, ":agent_no", pos1, 1000),#十米
+               (agent_is_alive, ":agent_no"),
+               (neq, ":agent_no", ":user_agent_no"),
+               (neq, ":agent_no", ":user_horse_agent"),
+               (agent_deliver_damage_to_agent, ":user_agent_no", ":agent_no", 300),#造成伤害
+            (try_end),
+
+         (else_try),
+            (eq, ":item_no", "itm_skeleton_spear_anim"),#骨矛
+            (prop_instance_get_position, pos1, ":instance_no"),
+            (set_fixed_point_multiplier, 100),
+            (position_move_z, pos1, 200),
+            (try_begin),
+               (scene_prop_get_slot, ":agent_no", ":instance_no", slot_instance_agent_used),
+               (ge, ":agent_no", 0),
+               (agent_get_slot, ":target_agent_no", ":agent_no", slot_ai_target),
+               (ge, ":target_agent_no", 0),
+               (agent_get_bone_position, pos2, ":target_agent_no", 8, 1),#thorax胸
+            (else_try),
+               (copy_position, pos2, pos1),#向前射击
+               (position_move_y, pos2, 100),
+            (try_end),
+            (call_script, "script_pos_aim_at_pos", pos1, pos2),#获取射击方向
+            (add_missile, ":agent_no", pos1, 3000, "itm_rib_spear", 0, "itm_rib_spear", 0),
+         (try_end),
+
+      (else_try),
+         (scene_prop_get_slot, ":agent_no", ":timer_instance_no", slot_instance_agent_used),#使用者为人时
+         (ge, ":agent_no", 0),
+      (try_end),
+
+      (scene_prop_set_slot, ":timer_instance_no", slot_instance_agent_used, -1),#清空
+      (scene_prop_set_slot, ":timer_instance_no", slot_instance_prop_used, -1),
+      (scene_prop_set_slot, ":timer_instance_no", slot_instance_stage, -1),
+    ]),
+  ]),
+
+
+
+  ("sorcery_aegis", 0,"sorcery_aegis","bo_sorcery_aegis", [#圣盾
+    (ti_on_scene_prop_hit,
+    [
+      (store_trigger_param, ":instance_no", 1),
+      (store_trigger_param, ":attacker_agent_no", 3),
+
+      (scene_prop_get_slot, ":speller_agent_no", ":instance_no", slot_instance_agent_used),#施术者
+      (neq, ":speller_agent_no", ":attacker_agent_no"),
+      (agent_is_alive, ":speller_agent_no"),
+      (agent_get_team, ":speller_team_no", ":speller_agent_no"),#施术者阵营
+      (agent_get_team, ":attacker_team_no", ":attacker_agent_no"),#攻击者阵营
+      (teams_are_enemies, ":speller_team_no", ":attacker_team_no"), #敌对
+
+      (agent_get_wielded_item, ":weapon_no", ":speller_agent_no", 1),#盾
+      (try_begin),
+         (eq, ":weapon_no", "itm_purifier_eagle_tower_shield"),#净世军鹰塔盾
+         (agent_deliver_damage_to_agent, ":speller_agent_no", ":attacker_agent_no", 25),#造成伤害
+      (else_try),
+         (this_or_next|eq, ":weapon_no", "itm_papal_soldier_tower_shield"),#教国士兵塔盾
+         (eq, ":weapon_no", "itm_patron_tower_shield"),#守护者塔盾
+         (agent_deliver_damage_to_agent, ":speller_agent_no", ":attacker_agent_no", 30),#造成伤害
+      (try_end),
+    ]),
+  ]),
+
+  ("sorcery_heavenly_wall", 0,"sorcery_heavenly_wall","bo_sorcery_aegis", [#天国之壁
+    (ti_on_scene_prop_hit,
+    [
+      (store_trigger_param, ":instance_no", 1),
+      (store_trigger_param, ":attacker_agent_no", 3),
+      (store_trigger_param, ":attacker_weapon_no", 4),
+#pos1为击中的位置
+
+      (agent_is_human, ":attacker_agent_no"),
+      (gt, ":attacker_weapon_no", 0),
+      (item_get_type, ":weapon_type_no", ":attacker_weapon_no"),
+      (this_or_next|eq, ":weapon_type_no", itp_type_one_handed_wpn),
+      (this_or_next|eq, ":weapon_type_no", itp_type_two_handed_wpn),
+      (eq, ":weapon_type_no", itp_type_polearm),                           #近战武器
+
+      (set_fixed_point_multiplier, 100),
+      (agent_get_speed, pos1, ":attacker_agent_no"),
+      (position_get_x, ":cur_x", pos1),
+      (position_get_y, ":cur_y", pos1),
+      (val_mul, ":cur_x", ":cur_x"),
+      (val_mul, ":cur_y", ":cur_y"),
+      (val_add, ":cur_x", ":cur_y"),
+      (gt, ":cur_x", 490000),#超过七米每秒
+
+#武器折断或造成伤害
+      (try_begin),
+         (item_has_property, ":attacker_weapon_no", itp_wooden_parry),#木柄
+
+         (agent_unequip_item, ":attacker_agent_no", ":attacker_weapon_no"),
+         (agent_play_sound, ":attacker_agent_no", "snd_shield_broken"),
+         (particle_system_burst, "psys_gourd_piece_2", pos1, 5),
+         (try_begin),
+            (eq, ":attacker_agent_no", "$mission_player_agent"),#玩家
+            (agent_set_slot, "$mission_player_agent", "$cur_weapon_right_hand", -1),
+            (store_add, ":modifier_slot_no", "$cur_weapon_right_hand", 12),
+            (agent_set_slot, "$mission_player_agent", ":modifier_slot_no", -1),#modifier
+         (try_end),
+      (else_try),
+         (scene_prop_get_slot, ":speller_agent_no", ":instance_no", slot_instance_agent_used),#施术者
+         (agent_deliver_damage_to_agent, ":speller_agent_no", ":attacker_agent_no", 60),#造成伤害
+      (try_end),
+
+#落马
+      (try_begin),
+         (agent_get_horse, ":agent_horse_no", ":attacker_agent_no"),
+         (ge, ":agent_horse_no", 0),#骑兵
+         (agent_set_animation, ":agent_horse_no", "anim_horse_rear"),#惊马
+         (agent_play_sound, ":agent_horse_no", "snd_neigh"),
+
+         (try_begin),
+            (agent_get_troop_id, ":rider_troop_no", ":attacker_agent_no"),
+            (store_skill_level, ":npc_skl", skl_riding, ":rider_troop_no"),
+            (val_mul, ":npc_skl", 10),
+
+            (agent_get_item_id, ":horse_item_no", ":agent_horse_no"),
+            (item_get_horse_maneuver, ":return_value", ":horse_item_no"),
+#               (call_script, "script_item_property_modifier", 2715, ":original_modifier_no", ":return_value"),
+            (val_add, ":return_value", ":npc_skl"),
+            (lt, ":return_value", 100),                                   #10*riding+horse_maneuver<100  骑术×10加上马的顺从小于100，就会落马
+
+            (agent_set_animation, ":attacker_agent_no", "anim_strike2_chest_back", 1), 
+            (agent_start_running_away, ":agent_horse_no"),
+         (try_end),
+      (try_end),
+    ]),
+  ]),
+
+  ("sorcery_drop_of_reasoning_sea", 0,"sorcery_drop_of_reasoning_sea","bo_sorcery_aegis", [#理海的一滴
+    (ti_on_scene_prop_hit,
+    [
+      (store_trigger_param, ":instance_no", 1),
+      (store_trigger_param, ":attacker_agent_no", 3),
+      (store_trigger_param, ":attacker_weapon_no", 4),
+#pos1为击中的位置
+
+      (scene_prop_get_slot, ":speller_agent_no", ":instance_no", slot_instance_agent_used),#施术者
+      (neq, ":speller_agent_no", ":attacker_agent_no"),
+      (agent_is_alive, ":speller_agent_no"),
+      (agent_get_team, ":speller_team_no", ":speller_agent_no"),#施术者阵营
+      (agent_get_team, ":attacker_team_no", ":attacker_agent_no"),#攻击者阵营
+      (teams_are_enemies, ":speller_team_no", ":attacker_team_no"), #敌对
+
+#施加伤害
+      (assign, ":damage", 100),
+      (agent_get_wielded_item, ":weapon_no", ":speller_agent_no", 1),#盾
+      (try_begin),
+         (eq, ":weapon_no", "itm_patron_tower_shield"),#守护者塔盾
+         (val_add, ":damage", 70),
+      (try_end),
+      (agent_deliver_damage_to_agent, ":speller_agent_no", ":attacker_agent_no", ":damage"),#造成伤害
+
+#武器折断
+      (try_begin),
+         (item_has_property, ":attacker_weapon_no", itp_wooden_parry),#木柄
+
+         (agent_unequip_item, ":attacker_agent_no", ":attacker_weapon_no"),
+         (agent_play_sound, ":attacker_agent_no", "snd_shield_broken"),
+         (particle_system_burst, "psys_gourd_piece_2", pos1, 5),
+         (try_begin),
+            (eq, ":attacker_agent_no", "$mission_player_agent"),#玩家
+            (agent_set_slot, "$mission_player_agent", "$cur_weapon_right_hand", -1),
+            (store_add, ":modifier_slot_no", "$cur_weapon_right_hand", 12),
+            (agent_set_slot, "$mission_player_agent", ":modifier_slot_no", -1),#modifier
+         (try_end),
+      (try_end),
+
+#落马
+      (try_begin),
+         (agent_get_horse, ":agent_horse_no", ":attacker_agent_no"),
+         (ge, ":agent_horse_no", 0),#骑兵
+         (agent_set_animation, ":agent_horse_no", "anim_horse_rear"),#惊马
+         (agent_play_sound, ":agent_horse_no", "snd_neigh"),
+
+         (try_begin),
+            (agent_get_troop_id, ":rider_troop_no", ":attacker_agent_no"),
+            (store_skill_level, ":npc_skl", skl_riding, ":rider_troop_no"),
+            (val_mul, ":npc_skl", 10),
+
+            (agent_get_item_id, ":horse_item_no", ":agent_horse_no"),
+            (item_get_horse_maneuver, ":return_value", ":horse_item_no"),
+#               (call_script, "script_item_property_modifier", 2715, ":original_modifier_no", ":return_value"),
+            (val_add, ":return_value", ":npc_skl"),
+            (lt, ":return_value", 100),                                   #10*riding+horse_maneuver<100  骑术×10加上马的顺从小于100，就会落马
+
+            (agent_set_animation, ":attacker_agent_no", "anim_strike2_chest_back", 1), 
+            (agent_start_running_away, ":agent_horse_no"),
+         (try_end),
+      (try_end),
+    ]),
+  ]),
+]
