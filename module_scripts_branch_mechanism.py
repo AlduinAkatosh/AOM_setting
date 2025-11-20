@@ -7340,9 +7340,9 @@ scripts_branch = [
   ]),
 
 
-#在会战沙盘上安排编队位置。
+#在会战沙盘上刷出编队，暂时先不管后续阵型展开（因为阵型要对着敌人展开，得等所有编队刷出完毕）。
 #输入部队ID，阵型item ID，沙盘底板的部队ID和编队总数，用于遍历
-  ("auto_create_formation",
+  ("auto_spawn_detachment",
     [
       (store_script_param, ":party_no", 1), #来源party
       (store_script_param, ":formation_no", 2), #所选阵型
@@ -7371,6 +7371,10 @@ scripts_branch = [
             (party_set_slot, ":temp_party_id", slot_tool_party_cohesion, 200), 
          (else_try),
             (party_set_slot, ":temp_party_id", slot_tool_party_cohesion, 300), #设置组织力，初始默认300
+         (try_end), 
+         (try_begin),
+            (party_slot_eq, ":temp_party_id", slot_tool_party_function, "itm_detachment_commander"), #指挥编队开局设置启动摆阵
+            (party_set_slot, ":temp_party_id", slot_tool_party_rally, ":formation_no"), 
          (try_end), 
       (try_end),
   ]),
@@ -7544,28 +7548,237 @@ scripts_branch = [
     ]),
 
 
-#————————————————————————————沙盘AI——————————————————————————
-#沙盘AI，输入来源部队party，沙盘地图的party ID。如果不需考虑来源部队，直接处理所有编队的话，输入-1
-  ("campaign_ai",
-    [
-      (store_script_param, ":area_no", 1), #沙盘所用的部队，随机野战就是p_campaign_temp
-      (store_script_param, ":party_no", 2), #来源party，不需要这一项就输入-1
 
-      (try_for_range, ":slot_no", 0, "$g_total_detachment"), #
+##新增
+
+#预设用于摆阵的权重，具体操作为获取输入部队的指挥编队，看是否存在，并获取slot_tool_party_rally中储存的阵型。然后，获取敌方朝向，将指挥编队周围位置全部记下一个权重，用于沙盘AI中引导其他编队进入阵型位置。
+#记录权重时不需要考虑地形，因为权重是扩散的，如果被地形阻隔，会自动朝其他位置扩散。
+  ("auto_create_formation", [
+      (store_script_param, ":party_no", 1), #原部队
+      (assign, ":commander_detachment_no", -1),
+      (try_for_range, ":slot_no", 0, "$g_total_detachment"), #寻找指挥编队
          (troop_get_slot, ":temp_party_id", "trp_temp_array_detachment", ":slot_no"), 
-         (this_or_next|party_slot_eq, ":temp_party_id", slot_tool_party_resource, ":party_no"), #属于该部队的编队
-         (eq, ":party_no", -1),
-         (call_script, "script_campaign_ai_technology", ":temp_party_id", ":area_no"), #沙盘移动AI
-         (party_set_slot, ":temp_party_id", slot_tool_party_position_x, reg1),#设置位置
-         (party_set_slot, ":temp_party_id", slot_tool_party_position_y, reg2),
-
-(str_store_party_name, s1, ":temp_party_id"),
-(display_message, "@{s1} 评 估 完 毕 ，前 往 （{reg1}，{reg2}） "),
-
-         (party_get_slot, ":cohesion_count", ":temp_party_id", slot_tool_party_cohesion),#扣除组织力
-         (val_sub, ":cohesion_count", reg4),
-         (party_set_slot, ":temp_party_id", slot_tool_party_cohesion, ":cohesion_count"),
+         (party_slot_eq, ":temp_party_id", slot_tool_party_resource, ":party_no"), #属于该部队的编队
+         (party_slot_eq, ":temp_party_id", slot_tool_party_function, "itm_detachment_commander"), #指挥编队
+         (assign, ":commander_detachment_no", ":temp_party_id"), 
       (try_end),
+
+      (try_begin),
+         (ge, ":commander_detachment_no", 0), #已找到
+         (party_get_slot, ":formation_no", ":commander_detachment_no", slot_tool_party_rally), #获取阵型
+         (gt, ":formation_no", 0), #已激活阵型
+         (neq, ":formation_no", "itm_formation_common"), #普通和驻扎不用处理
+         (neq, ":formation_no", "itm_formation_station"), 
+         (party_get_slot, ":cur_x", ":commander_detachment_no", slot_tool_party_position_x),#获取指挥部队位置，也是判断敌方方向、展开阵型的基点
+         (party_get_slot, ":cur_y", ":commander_detachment_no", slot_tool_party_position_y),
+         (party_get_slot, ":team_no", ":commander_detachment_no", slot_tool_party_team), #获取阵营
+
+         (assign, ":enemy_power_count_old", 0), #敌对力量在指挥编队位置的计分
+         (try_for_range, ":count_no", 0, 4),
+            (call_script, "script_campaign_caculate_team_power",  ":cur_x",  ":cur_y", ":count_no", ":commander_detachment_no"), #指挥编队位置上的计分
+            (eq, ":team_no", 1), #1军检测2军＋非人
+            (this_or_next|eq, ":count_no", 2),
+            (eq, ":count_no", 3),
+            (val_add, ":enemy_power_count_old", reg1),
+         (else_try),
+            (eq, ":team_no", 2), #2军检测1军＋非人
+            (this_or_next|eq, ":count_no", 1),
+            (eq, ":count_no", 3),
+            (val_add, ":enemy_power_count_old", reg1),
+         (try_end),
+
+         (assign, ":vector_x", 0), #指示敌方方向的单位向量（模长为1）
+         (assign, ":vector_y", 0), 
+         (assign, ":enemy_power_count_new_max", 0), #用于寻找敌方评分最高的方向
+         (try_for_range, ":vector_no", 0, 4), #检测上、下、左、右的点，获取比现位置敌方评分更高的点，作为认为的敌方方向
+            (try_begin),
+               (eq, ":vector_no", 0), #上
+               (assign, ":count_x", ":cur_x"),
+               (store_sub, ":count_y", ":cur_y", 1),
+            (else_try),
+               (eq, ":vector_no", 1), #下
+               (assign, ":count_x", ":cur_x"),
+               (store_add, ":count_y", ":cur_y", 1), 
+            (else_try),
+               (eq, ":vector_no", 2), #左
+               (store_sub, ":count_x", ":cur_x", 1),
+               (assign, ":count_y", ":cur_y"),
+            (else_try),
+               (eq, ":vector_no", 3), #右
+               (store_add, ":count_x", ":cur_x", 1),
+               (assign, ":count_y", ":cur_y"),
+            (try_end),
+            (is_between, ":count_x", 1, 16), #没超出棋盘范围
+            (is_between, ":count_y", 1, 16),
+
+            (assign, ":enemy_power_count_new", 0), #敌对力量在新位置的计分
+            (try_for_range, ":count_no", 0, 4), 
+               (call_script, "script_campaign_caculate_team_power",  ":count_x",  ":count_y", ":count_no", ":commander_detachment_no"), #新位置上的计分
+               (eq, ":team_no", 1), #1军检测2军＋非人
+               (this_or_next|eq, ":count_no", 2),
+               (eq, ":count_no", 3),
+               (val_add, ":enemy_power_count_new", reg1),
+            (else_try),
+               (eq, ":team_no", 2), #2军检测1军＋非人
+               (this_or_next|eq, ":count_no", 1),
+               (eq, ":count_no", 3),
+               (val_add, ":enemy_power_count_new", reg1),
+            (try_end),
+
+            (gt, ":enemy_power_count_new", ":enemy_power_count_old"), #敌方评分比原位置更高，认为是向着敌方去的方向
+            (gt, ":enemy_power_count_new", ":enemy_power_count_new_max"), #寻找敌方评分最高的方向
+            (assign, ":enemy_power_count_new_max", ":enemy_power_count_new"),
+            (assign,  ":vector_x", ":count_x"),
+            (val_sub,  ":vector_x", ":cur_x"),
+            (assign,  ":vector_y", ":count_y"),
+            (val_sub,  ":vector_y", ":cur_y"), 
+         (try_end),
+         (this_or_next|neq,  ":vector_x", 0), #获取到方向向量，为（":vector_x"，":vector_y"），模为1
+         (neq,  ":vector_y", 0),
+
+         (try_for_range, ":slot_no", 0, 225), #清空
+            (val_add, ":slot_no", slot_tool_party_rally), #指挥编队的slot_tool_party_rally往后，用于存它的阵型带来的权重加成
+            (val_add, ":slot_no", 1), 
+            (party_set_slot, ":commander_detachment_no", ":slot_no", -1), 
+         (try_end),
+
+         #设置由于阵型带来的权重，向量之后两个参数，第一个是相对指挥部队朝向的前后，正前负后，第二个是左右，正右负左。结合向量可以得出在global沙盘上的位移。能设置至多两种职能，不需要就填0。
+         (try_begin),
+            (eq, ":formation_no", "itm_formation_assault"), #进攻阵型
+            (call_script,"script_formation_set_position", ":commander_detachment_no", ":vector_x", ":vector_y", 0, 0, "itm_detachment_strike", 0), #指挥周围
+            (try_for_range, ":position_no", -5, 6), #前一排
+               (call_script,"script_formation_set_position", ":commander_detachment_no", ":vector_x", ":vector_y", 1, ":position_no", "itm_detachment_strike", 0),
+            (try_end),
+            (try_for_range, ":position_no", -5, 6), #指挥编队左右
+               (call_script,"script_formation_set_position", ":commander_detachment_no", ":vector_x", ":vector_y", 0, ":position_no", "itm_detachment_support", 0),
+            (try_end),
+            (try_for_range, ":position_no", -5, 6), #后一排
+               (call_script,"script_formation_set_position", ":commander_detachment_no", ":vector_x", ":vector_y", -1, ":position_no", "itm_detachment_logistic", 0),
+            (try_end),
+         (else_try),
+            (eq, ":formation_no", "itm_formation_suppress"), #压制阵型
+         (try_end),
+      (try_end),
+    ]),
+
+
+#输入指挥编队party ID，敌军方向向量x和y，相对位置前后和左右，前右为正，以及在这个位置上会有权重加成的编队职能的item ID。
+#信息储存在从slot_tool_party_rally开始的指挥编队slot中，采用数位储存
+#实际的沙盘中，会先判定该部分信息，如果有阵型的权重，就不会设置姿态的权重，免得需要对抗比如冲锋编队猪突的欲望。
+  ("formation_set_position", [
+      (store_script_param, ":detachment_no", 1), #指挥编队party ID
+      (store_script_param, ":vector_x", 2), #方向向量xy，比如（1，0）是朝下的，（0，1）是朝右的
+      (store_script_param, ":vector_y", 3), 
+      (store_script_param, ":pos_x", 4), #当前位置相对指挥编队的位置，以指挥面朝的方向为x正，右侧为y正
+      (store_script_param, ":pos_y", 5), 
+      (store_script_param, ":function_no_1", 6), #在此有加成的编队职能
+      (store_script_param, ":function_no_2", 7),
+
+      (party_get_slot, ":cur_x", ":detachment_no", slot_tool_party_position_x),#获取指挥部队位置，展开阵型的基点
+      (party_get_slot, ":cur_y", ":detachment_no", slot_tool_party_position_y),
+      (try_begin),
+         (eq, ":vector_x", 1), #敌军在下方，指挥编队的前也是global的正，但是右相对来说是左，要减
+         (val_add, ":cur_x", ":pos_x"),
+         (val_sub, ":cur_y", ":pos_y"),
+      (else_try),
+         (eq, ":vector_x", -1), #敌军在上方，右还是正，但是比指挥编队更前的需要减x
+         (val_sub, ":cur_x", ":pos_x"),
+         (val_add, ":cur_y", ":pos_y"),
+      (else_try),
+         (eq, ":vector_y", 1), #敌军在右方，前将会是global的右，右将会是global的下，都是加
+         (val_add, ":cur_x", ":pos_y"),
+         (val_add, ":cur_y", ":pos_x"),
+      (else_try),
+         (eq, ":vector_y", -1), #敌军在左方，前将会是global的左，右将会是global的上，都是减
+         (val_sub, ":cur_x", ":pos_y"),
+         (val_sub, ":cur_y", ":pos_x"),
+      (try_end),
+
+      (try_begin),
+         (is_between, ":cur_x", 1, 16), #没超出棋盘范围
+         (is_between, ":cur_y", 1, 16),
+         (call_script, "script_change_coordinate_to_number", 15, ":cur_x", ":cur_y"), #坐标转序号（从0开始）
+         (assign, ":slot_no", reg1),
+         (val_add, ":slot_no", slot_tool_party_rally), #指挥编队的slot_tool_party_rally往后，用于存它的阵型带来的权重加成
+         (val_add, ":slot_no", 1), 
+
+         (val_sub, ":function_no_1", "itm_detachment_common"),
+         (val_mul, ":function_no_1", 100),
+         (val_max, ":function_no_1", 0),
+         (val_sub, ":function_no_2", "itm_detachment_common"),
+         (val_max, ":function_no_2", 0),
+         (val_add, ":function_no_1", ":function_no_2"), #数位储存两种在此有加成的编队
+         (party_set_slot, ":detachment_no", ":slot_no", ":function_no_1"),
+      (try_end),
+  ]),
+
+#检测编队对于自己所属部队的指挥编队，是否在此有阵型加成。
+#输入编队的party ID，当前正在检测的xy。输入reg1表示检测见过，0为阵型为展开，或者该处不存在阵型的设置，转姿态检测；1表示检测编队在当前位置有需求；-1表示该位置有阵型，但是不是检测的编队，要扣分，以免挡别的编队的路。
+  ("formation_check_position", [
+      (store_script_param, ":detachment_no", 1), #编队party ID
+      (store_script_param, ":cur_x", 2), #xy位置
+      (store_script_param, ":cur_y", 3), 
+      (assign, ":check_result", 0), #检测结果
+
+      (party_get_slot, ":party_no", ":detachment_no", slot_tool_party_resource), #获取原部队
+      (assign, ":commander_detachment_no", -1),
+      (try_for_range, ":slot_no", 0, "$g_total_detachment"), #寻找指挥编队
+         (troop_get_slot, ":temp_party_id", "trp_temp_array_detachment", ":slot_no"), 
+         (party_slot_eq, ":temp_party_id", slot_tool_party_resource, ":party_no"), #属于该部队的编队
+         (party_slot_eq, ":temp_party_id", slot_tool_party_function, "itm_detachment_commander"), #指挥编队
+         (assign, ":commander_detachment_no", ":temp_party_id"), 
+      (try_end),
+
+      (try_begin),
+         (ge, ":commander_detachment_no", 0), #已找到指挥编队
+         (party_get_slot, ":formation_no", ":commander_detachment_no", slot_tool_party_rally), #指挥编队已启动阵型
+         (gt, ":formation_no", 0), #已激活阵型
+         (neq, ":formation_no", "itm_formation_common"), #排除普通和驻扎
+         (neq, ":formation_no", "itm_formation_station"), 
+
+         (call_script, "script_change_coordinate_to_number", 15, ":cur_x", ":cur_y"), #坐标转序号（从0开始）
+         (assign, ":slot_no", reg1),
+         (val_add, ":slot_no", slot_tool_party_rally), #指挥编队的slot_tool_party_rally往后，用于存它的阵型带来的权重加成
+         (val_add, ":slot_no", 1), 
+         (party_get_slot, ":value_no", ":commander_detachment_no", ":slot_no"),
+         (gt, ":value_no", 0),
+         (assign, ":check_result", -1), #阵型展开且该处有设置，先预设为-1，下面如果发现该编队确有加成再改为1
+
+         (store_div, ":function_no_1", ":value_no", 100),
+         (val_add, ":function_no_1", "itm_detachment_common"),
+         (store_mod, ":function_no_2", ":value_no", 100),
+         (val_add, ":function_no_2", "itm_detachment_common"),
+         (this_or_next|party_slot_eq, ":detachment_no", slot_tool_party_function, ":function_no_1"), #当前检测的编队，其职能是该位置需求的编队职能之一
+         (party_slot_eq, ":detachment_no", slot_tool_party_function, ":function_no_2"), 
+         (assign, ":check_result", 1),
+      (try_end),
+      (assign, reg1, ":check_result"),
+  ]),
+
+
+##新增
+
+
+#————————————————————————————沙盘AI——————————————————————————
+#沙盘AI，输入处理编队party ID，沙盘地图的party ID。
+  ("cf_campaign_ai",
+    [
+      (store_script_param, ":detachment_no", 1), #编队ID
+      (store_script_param, ":area_no", 2), #沙盘所用的部队，随机野战就是p_campaign_temp
+
+      (call_script, "script_campaign_ai_technology", ":detachment_no", ":area_no"), #沙盘移动AI
+
+(party_get_slot, reg3, ":detachment_no", slot_tool_party_position_x),
+(party_get_slot, reg4, ":detachment_no", slot_tool_party_position_y),
+(str_store_party_name, s1, ":detachment_no"),
+(display_message, "@{s1} 评 估 完 毕 ，从 （{reg3}，{reg4}） 前 往 （{reg1}，{reg2}） "),
+
+      (party_set_slot, ":detachment_no", slot_tool_party_position_x, reg1),#设置位置
+      (party_set_slot, ":detachment_no", slot_tool_party_position_y, reg2),
+
+      (party_get_slot, ":cohesion_count", ":detachment_no", slot_tool_party_cohesion),#扣除组织力
+      (val_sub, ":cohesion_count", reg4),
+      (party_set_slot, ":detachment_no", slot_tool_party_cohesion, ":cohesion_count"),
   ]),
 
 
@@ -7606,8 +7819,8 @@ scripts_branch = [
          (try_end),
          (is_between, ":count_x", 1, 16), #没超出沙盘范围
          (is_between, ":count_y", 1, 16), 
-         (call_script, "script_get_center_zone_ground", ":area_no", ":count_x", ":count_y"), #不是水体或岩壁等无法立足的区块（可能以后会改）
-         (neq, reg1, "itm_zone_water"), 
+         (call_script, "script_get_center_zone_ground", ":area_no", ":count_x", ":count_y"), #不是岩壁等无法立足的区块
+#         (neq, reg1, "itm_zone_water"), #水体，以后要改
          (neq, reg1, "itm_zone_cliff"), 
 
          (call_script, "script_campaign_ai_count", ":detachment_no", ":count_x", ":count_y"), #计算评分
@@ -7653,19 +7866,25 @@ scripts_branch = [
          (val_abs, ":count_x"),
          (val_sub, ":count_y", ":cur_y"),
          (val_abs, ":count_y"),
-         (val_sub, ":count_x", ":count_y"),
-         (val_abs, ":count_x"),
+         (val_add, ":count_x", ":count_y"),
          (try_begin),
             (lt, ":count_x", ":nearest_distance"), #寻找最近的该方编队
             (assign, ":nearest_distance", ":count_x"),
             (assign, ":nearest_detachment", ":temp_party_id"),
          (try_end),
-         (store_sub, ":count_x", 50, ":count_x"), #计算总分
-         (val_mul, ":count_x", ":troop_num"),
-         (val_add, ":count_power", ":count_x"),
+
+         (store_sub, ":count_x", 50, ":count_x"),  
+         (try_begin), #部队距离积分
+            (party_get_num_companions, ":troop_num", ":temp_party_id"),
+            (ge, ":troop_num", 300), #只算人数够多的，排除人数极少的比如小股密探、刺客、信使等
+            (val_div, ":troop_num", 2000), #编队人数太多，再计算拥挤程度时会等效于多个编队，2000一算，不少于1
+            (val_max, ":troop_num", 1),
+            (store_mul, ":troop_num", ":count_x", ":troop_num"),
+            (val_add, ":count_power", ":troop_num"),
+         (try_end),
       (try_end),
-      (assign, reg1, ":count_power"),
-      (assign, reg2, ":nearest_distance"),
+      (assign, reg1, ":count_power"), #部队位置评分
+      (assign, reg2, ":nearest_distance"), #最近的部队距离和ID
       (assign, reg3, ":nearest_detachment"),
   ]),
 
@@ -7678,7 +7897,7 @@ scripts_branch = [
       (store_script_param, ":cur_x", 2), #将要计算评分的横纵坐标xy
       (store_script_param, ":cur_y", 3), 
       (assign, ":power_count", 0), #初始化评分
-      (assign, ":cohesion_count", 0), #初始化组织力
+      (assign, ":cohesion_count", 0), #初始化消耗的组织力
 
 #基础信息汇总
       (party_get_slot, ":team_no", ":detachment_no", slot_tool_party_team), #哪一方阵营
@@ -7725,39 +7944,29 @@ scripts_branch = [
          (val_add, ":detachment_count", ":cur_detachment_num"), #因为是预设已经移到那里去了，所以要加上该编队占据的位置
       (try_end),
 
+(str_store_string, s4, "@无 部 队 规 模 减 益 "),
       (try_begin),
-         (le, ":detachment_count", 3), #总编队数不会超过3不受减益，且有友方编队，会是比较理想的目标地
-         (ge, ":ally_count", 1),
-         (val_add, ":power_count", 40), 
-      (else_try),
-         (gt, ":detachment_count", 3),
-         (store_sub, ":value_no", ":detachment_count", 3), #超过3就会受到减益，每多一个少30，达到6时将会减接近100，软上限
+         (gt, ":detachment_count", 4),
+         (store_sub, ":value_no", ":detachment_count", 4), #超过4就会受到减益，每多一个少30，达到7时将会减接近100，软上限
          (val_mul, ":value_no", 30),
          (val_sub, ":power_count", ":value_no"), 
+(assign, reg1, ":value_no"),
+(str_store_string, s4, "@因 部 队 规 模 造 成 的 -{reg1} "),
       (try_end),
 
 #敌我人数评估
+(str_store_string, s3, "@邻 近 无 交 战 "),
       (store_add, ":count_no", ":cur_detachment_num", ":ally_count"), #己方和友军的总和
       (try_begin),
          (gt, ":enemy_count", 0), #存在敌军
          (le, ":ally_count", ":enemy_count"), #友军本来和敌军在此势均力敌或有劣势，进入后有了优势，会倾向于雪中送炭
          (ge, ":count_no", ":enemy_count"),
          (val_add, ":power_count", 40), 
+(str_store_string, s3, "@支 援 邻 近 友 军 +40 "),
       (else_try),
          (lt, ":count_no", ":enemy_count"), #进入后人数少于敌军，不倾向于前往
          (val_sub, ":power_count", 30), 
-      (try_end),
-
-#组织力消耗评估
-      #一般来说编队不会因为组织力消耗而倾向于不做进行某项战术，只会在剩余组织力逼近危险线时做出应对。但是移动选项将会减少些微的组织力，抵消用于模糊系统优先级的微小扰动。表现为如果移动和停留在原地评分相同，编队会倾向于原地待命。
-      (try_begin),
-         (this_or_next|neq, ":last_x", ":cur_x"),#排除评估原地不动选项时的重复
-         (neq, ":last_y", ":cur_y"),
-         (assign, ":value_no", ":cur_detachment_num"),
-         (val_max, ":value_no", 1), #移动最少消耗1组织力，即使不占规模的部队也是一样
-         (val_add, ":cohesion_count", ":value_no"), #该移动会消耗的组织力
-         (val_mul, ":value_no", 5), #编队规模×5
-         (val_sub, ":power_count", ":value_no"), 
+(str_store_string, s3, "@邻 近 敌 军 力 量 太 强 -30 "),
       (try_end),
 
 #行动姿态评估
@@ -7792,7 +8001,6 @@ scripts_branch = [
       (assign, ":enemy_power_count_old", 0), #敌对力量在原位置的计分
       (try_for_range, ":count_no", 0, 4),
          (call_script, "script_campaign_caculate_team_power",  ":last_x",  ":last_y", ":count_no", ":detachment_no"), #原位置上的计分
-(display_message, "@{reg1}"),
          (eq, ":team_no", ":count_no"),
          (neq, ":team_no", 3), #非人彼此之间无协调
          (assign, ":ally_power_count_old", reg1), #同阵型计分
@@ -7815,38 +8023,74 @@ scripts_branch = [
          (val_add, ":enemy_power_count_old", reg1),
       (try_end),
 
+
+##新增
+
+(str_store_string, s2, "@姿 态 判 定 未 生 效 "),
       (party_get_slot, ":attitude_no", ":detachment_no", slot_tool_party_attitude), 
       (try_begin),
+         (neg|party_slot_eq, ":detachment_no", slot_tool_party_function, "itm_detachment_commander"), #不是指挥编队
+         (call_script, "script_formation_check_position", ":detachment_no",  ":cur_x",  ":cur_y"), #判断部队是否在该位置有阵型需求，有就不做姿态判断了。以阵型为优先。
+         (neq, reg1, 0), 
+         (try_begin),
+            (eq, reg1, 1), #检测成功
+            (val_add, ":power_count", 100), 
+(str_store_string, s2, "@阵 型 检 测 成 功 +100 "),
+         (else_try),
+            (eq, reg1, -1), #检测失败
+            (val_sub, ":power_count", 100),
+(str_store_string, s2, "@阵 型 检 测 失 败 -100 "), 
+         (try_end),
+
+##新增
+
+      (else_try),                                      #既不成功也不失败，reg1＝0时表示该处与阵型无关时，检测姿态
          (eq, ":attitude_no", ai_attitude_charge), #冲锋
          (gt, ":enemy_power_count_new", ":enemy_power_count_old"), #向敌人多的地方去
          (val_add, ":power_count", 50), 
-(display_message, "@a"),
-      (else_try),
+(str_store_string, s2, "@冲 锋 姿 态 判 定 生 效 加 50 "),
+      (else_try), 
          (eq, ":attitude_no", ai_attitude_rout), #溃逃
          (lt, ":enemy_power_count_new", ":enemy_power_count_old"), #向敌人少的地方去
          (val_add, ":power_count", 50), 
-(display_message, "@b"),
+(str_store_string, s2, "@溃 逃 姿 态 判 定 生 效 加 50 "),
       (else_try),
          (eq, ":attitude_no", ai_attitude_harass), #牵制
          (eq, ":enemy_nearest_distance", 3), #3是射程，以后要改
          (val_add, ":power_count", 50), 
+(str_store_string, s2, "@牵 制 姿 态 判 定 生 效 加 50 "),
       (else_try),
          (eq, ":attitude_no", ai_attitude_guard), #守卫
          (gt, ":enemy_power_count_new", ":enemy_power_count_old"), #向敌人多的地方去且距离最近友军不超过1
          (le, ":ally_nearest_distance", 1), 
          (val_add, ":power_count", 50), 
+(str_store_string, s2, "@守 卫 姿 态 判 定 生 效 加 50 "),
       (else_try),
          (eq, ":attitude_no", ai_attitude_evade), #回避
          (lt, ":enemy_power_count_new", ":enemy_power_count_old"), #向敌人少的地方去且距离最近友军不超过1
          (le, ":ally_nearest_distance", 1), 
          (val_add, ":power_count", 50), 
-(display_message, "@c"),
+(str_store_string, s2, "@回 避 姿 态 判 定 生 效 加 50 "),
       (else_try),
          (eq, ":attitude_no", ai_attitude_selfprotect), #自我保护
          (gt, ":ally_power_count_new", ":ally_power_count_old"), #向友军多的地方去
          (val_add, ":power_count", 50), 
+(str_store_string, s2, "@自 我 保 护 姿 态 判 定 生 效 加 50 "),
       (try_end),
 
+#组织力消耗评估
+      #一般来说编队不会因为组织力消耗而倾向于不做进行某项战术，只会在剩余组织力逼近危险线时做出应对。但是移动选项将会减少些微的组织力，抵消用于模糊系统优先级的微小扰动。表现为如果移动和停留在原地评分相同，编队会倾向于原地待命。
+      (try_begin),
+         (this_or_next|neq, ":last_x", ":cur_x"),#排除评估原地不动选项时的重复
+         (neq, ":last_y", ":cur_y"),
+         (assign, ":value_no", ":cur_detachment_num"),
+         (val_max, ":value_no", 1), #移动最少消耗1组织力，即使不占规模的部队也是一样
+         (val_add, ":cohesion_count", ":value_no"), #该移动会消耗的组织力
+         (val_mul, ":value_no", 5), #编队规模×5
+         (val_sub, ":power_count", ":value_no"), 
+      (try_end),
+
+#扰动和结果输出
       (store_random_in_range, ":value_no", 0, 6), #为估值增加一个微小的扰动，模糊掉由于系统结构造成的优先级
       (val_add, ":power_count", ":value_no"), 
       (assign, reg1, ":power_count"),
@@ -7858,7 +8102,7 @@ scripts_branch = [
          (assign, reg6, ":enemy_power_count_old"),
          (assign, reg7, ":enemy_power_count_new"),
 (str_store_party_name, s1, ":detachment_no"),
-(display_message, "@{s1} 在（{reg4}，{reg5}）上 敌 军 分 数 {reg7}， 原 分 数 {reg6}— — 总 评 分 {reg1}"),
+(display_message, "@{s1} 在（{reg4}，{reg5}）上 {s4}， {s3}， {s2}— — 总 评 分 {reg1}"),
   ]),
 
 

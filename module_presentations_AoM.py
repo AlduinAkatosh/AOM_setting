@@ -7771,15 +7771,22 @@ AoM_presentations = [
               (try_end),
               (call_script, "script_auto_allocate_troop", ":party_no", ":formation_no", ":detachment_count"), #分兵
               (call_script, "script_set_detachment_attitude", ":party_no", -1), #设置编队初始姿态，暂无预设，根据会战的模式可能会改
-              (call_script, "script_auto_create_formation", ":party_no", ":formation_no", "$current_town"), #根据阵型安放编队
+              (call_script, "script_auto_spawn_detachment", ":party_no", ":formation_no", "$current_town"), #刷出编队
            (try_end),
 
+##新增
            #AI处理
            (try_for_range, ":party_no", 1, "$g_quick_battle_party_total"), #预处理，让聚在一起刷新的部队散开，摆出阵型
-              (try_for_range, ":unused", 0, 5), #先预设五步，后续可能根据会战情况，不同部队有所不同
-                 (call_script, "script_campaign_ai", "$current_town", ":party_no"), #AI自动行动
+              (call_script, "script_auto_create_formation", ":party_no"), #预设该军用于摆阵的权重
+              (try_for_range_backwards, ":slot_no", 0, "$g_total_detachment"), 
+                 (troop_get_slot, ":temp_party_id", "trp_temp_array_detachment", ":slot_no"), 
+                 (party_slot_eq, ":temp_party_id", slot_tool_party_resource, ":party_no"), #属于该部队的编队
+                 (try_for_range, ":unused", 0, 5), #先预设五步，后续可能根据会战情况，不同部队有所不同
+                    (call_script, "script_cf_campaign_ai", "$current_town", ":party_no"), #AI自动行动
+                 (try_end),
               (try_end),
            (try_end),
+##新增
 
            (jump_to_menu, "mnu_campaign_round"),
            (presentation_set_duration, 0),
